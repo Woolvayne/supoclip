@@ -81,7 +81,13 @@ import { VIDEO_SOURCE_LABELS, VideoSourceIcon, videoSourceKind, type VideoSource
 import { cn } from "@/lib/utils";
 import { formatClock } from "@/lib/source-range";
 import { FontSelectOption, type FontOption } from "@/components/font-select-option";
-import { ClipPostList, ClipPublishButton, useSocialPostToasts } from "@/components/clip-publisher";
+import {
+  ClipAutoPostButton,
+  ClipPostList,
+  ClipPublishButton,
+  TaskAutoPublishAllButton,
+  useSocialPostToasts,
+} from "@/components/clip-publisher";
 import {
   ACTIVE_POST_STATUSES,
   type SocialConnection,
@@ -1021,14 +1027,46 @@ export default function TaskPage() {
   // One lock for every view: a clip being re-rendered can't be edited, deleted, published or opened in the studio.
   const renderingClip = (clip: Clip) => Boolean(clipJob && clipJobActive && (clipJob.clipIds === "all" || clipJob.clipIds.includes(clip.id)));
 
-  const publishButton = (clip: Clip) => task?.status === "completed" && !renderingClip(clip) ? (
-    <ClipPublishButton
-      taskId={task.id}
-      clip={clip}
-      connections={socialConnections}
-      providers={socialProviders}
-      onChanged={loadSocialPosts}
-    />
+  const publishButton = (clip: Clip) => task?.status === "completed" && !readOnly && !renderingClip(clip) ? (
+    <>
+      <ClipAutoPostButton
+        taskId={task.id}
+        clip={clip}
+        connections={socialConnections}
+        providers={socialProviders}
+        posts={socialPosts.filter((post) => post.clip_id === clip.id)}
+        onChanged={loadSocialPosts}
+      />
+      <ClipPublishButton
+        taskId={task.id}
+        clip={clip}
+        connections={socialConnections}
+        providers={socialProviders}
+        onChanged={loadSocialPosts}
+      />
+    </>
+  ) : null;
+
+  const tilePublishActions = (clip: Clip) => task?.status === "completed" && !readOnly && !renderingClip(clip) && socialProviders.some((p) => p.configured) ? (
+    <>
+      <ClipAutoPostButton
+        taskId={task.id}
+        clip={clip}
+        connections={socialConnections}
+        providers={socialProviders}
+        posts={socialPosts.filter((post) => post.clip_id === clip.id)}
+        onChanged={loadSocialPosts}
+        compact
+      />
+      <ClipPublishButton
+        taskId={task.id}
+        clip={clip}
+        connections={socialConnections}
+        providers={socialProviders}
+        onChanged={loadSocialPosts}
+        compact
+      />
+    </>
   ) : null;
 
   const focusedRendering = focusedClip ? renderingClip(focusedClip) : false;
@@ -1058,6 +1096,7 @@ export default function TaskPage() {
       busy={pendingAction === clip.id}
       best={bestScore > 0 && clip.virality_score === bestScore}
       partTotal={partTotal}
+      publishActions={tilePublishActions(clip)}
       onOpen={() => setFocusIndex(index)}
       onDownload={() => handleDownloadClip(clip)}
       onDelete={readOnly ? undefined : () => setDeletingClipId(clip.id)}
@@ -1174,11 +1213,20 @@ export default function TaskPage() {
             )}
             {hasClips && (
               <>
+                {task.status === "completed" && !clipJobActive && (
+                  <TaskAutoPublishAllButton
+                    taskId={task.id}
+                    clipCount={clips.length}
+                    connections={socialConnections}
+                    providers={socialProviders}
+                    onChanged={loadSocialPosts}
+                  />
+                )}
                 <Button size="sm" variant="outline" onClick={handleCopyShareLink} disabled={shareState === "copying"} aria-live="polite">
                   {shareState === "copied" ? <Check className="size-4" /> : <Share2 className="size-4" />}
                   <span className="max-sm:sr-only">{shareState === "copying" ? t("creatingLink") : shareState === "copied" ? t("linkCopied") : t("copyShare")}</span>
                 </Button>
-                <Button size="sm" asChild>
+                <Button size="sm" variant="outline" asChild>
                   <Link href={`/tasks/${task.id}/edit`}><Clapperboard className="size-4" />{t("openEditor")}</Link>
                 </Button>
               </>

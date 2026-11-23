@@ -2,7 +2,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 
-import { ClipPostList, ClipPublishButton } from "./clip-publisher";
+import {
+  ClipAutoPostButton,
+  ClipPostList,
+  ClipPublishButton,
+  TaskAutoPublishAllButton,
+} from "./clip-publisher";
 import type { SocialConnection, SocialPost, SocialProviderStatus } from "@/lib/social";
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), loading: vi.fn() } }));
@@ -413,3 +418,79 @@ it("prefills a series part's planned caption instead of drafting one", async () 
   expect(screen.getByLabelText("Title")).toHaveValue("Part 2");
   expect(fetch).not.toHaveBeenCalledWith("/api/social/captions", expect.anything());
 });
+
+it("auto-populates hashtags and selects all Buffer channels when opening the sheet", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+    caption: "Hook caption",
+    hashtags: ["finance", "investing", "shorts"],
+    title: "Generated title",
+  })));
+  const bufProv = provider({ provider: "buffer", display_name: "Buffer" });
+  const bufAcc1 = connection({ id: "buf-1", provider: "buffer", display_name: "TikTok · @me" });
+  const bufAcc2 = connection({ id: "buf-2", provider: "buffer", display_name: "Instagram · @me" });
+  render(
+    <ClipPublishButton
+      taskId="task-1"
+      clip={{ id: "clip-1", clip_order: 1, hook_title: null, text: "Transcript" }}
+      connections={[bufAcc1, bufAcc2]}
+      providers={[bufProv]}
+      onChanged={vi.fn()}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+  await waitFor(() => expect(screen.getByLabelText("Hashtags")).toHaveValue("finance, investing, shorts"));
+  expect(screen.getByLabelText("Title")).toHaveValue("Generated title");
+  expect(screen.getByRole("checkbox", { name: /Buffer · TikTok · @me/ })).toBeChecked();
+  expect(screen.getByRole("checkbox", { name: /Buffer · Instagram · @me/ })).toBeChecked();
+});
+
+it("one-click auto-posts a single clip and batch-schedules all clips", async () => {
+  const calls: Array<{ url: string; body: unknown }> = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    const body = init?.body ? JSON.parse(init.body as string) : null;
+    calls.push({ url, body });
+    return Response.json({
+      posts: [{ id: "p-1", status: "queued" }],
+      total_posts: 2,
+      clips_published_or_scheduled: body?.mode === "staggered" ? 4 : 1,
+      skipped_clips: 0,
+    });
+  }));
+  const onChanged = vi.fn();
+  const bufProv = provider({ provider: "buffer", display_name: "Buffer" });
+  const bufAcc = connection({ id: "buf-1", provider: "buffer", display_name: "TikTok · @me" });
+
+  render(
+    <>
+      <ClipAutoPostButton
+        taskId="task-1"
+        clip={clip}
+        connections={[bufAcc]}
+        providers={[bufProv]}
+        onChanged={onChanged}
+      />
+      <TaskAutoPublishAllButton
+        taskId="task-1"
+        clipCount={4}
+        connections={[bufAcc]}
+        providers={[bufProv]}
+        onChanged={onChanged}
+      />
+    </>,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Auto-post" }));
+  await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+  expect(calls[0]).toEqual({
+    url: "/api/social/auto-publish",
+    body: { task_id: "task-1", clip_ids: ["clip-1"], mode: "now" },
+  });
+
+  fireEvent.click(screen.getByRole("button", { name: "Post all clips" }));
+  await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(2));
+  expect(calls[1]).toEqual({
+    url: "/api/social/auto-publish",
+    body: { task_id: "task-1", mode: "staggered", interval_minutes: 60 },
+  });
+});
+

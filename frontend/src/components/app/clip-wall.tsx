@@ -90,7 +90,7 @@ function sourceMoments(clip: WallClip): SourceRange[] | null {
   return Array.isArray(ranges) && ranges.length > 1 ? ranges : null;
 }
 
-export function ClipTile({ clip, taskId, busy, best, editable, partTotal, onOpen, onDownload, onDelete }: {
+export function ClipTile({ clip, taskId, busy, best, editable, partTotal, publishActions, onOpen, onDownload, onDelete }: {
   clip: WallClip;
   taskId: string;
   busy: boolean;
@@ -98,6 +98,7 @@ export function ClipTile({ clip, taskId, busy, best, editable, partTotal, onOpen
   editable: boolean;
   /** Parts in the series, for the "Part n of N" badge. */
   partTotal?: number;
+  publishActions?: React.ReactNode;
   onOpen: () => void;
   onDownload: () => void;
   onDelete?: () => void;
@@ -165,6 +166,11 @@ export function ClipTile({ clip, taskId, busy, best, editable, partTotal, onOpen
             </Button>
           )}
         </div>
+        {publishActions && (
+          <div className="mt-1.5 flex items-center gap-1">
+            {publishActions}
+          </div>
+        )}
       </div>
     </article>
   );

@@ -81,6 +81,8 @@ echo "==> [3/6] Pausiere Worker fuer ressourcenschonenden Build & pruefe Datenba
 pkill -f "/opt/supoclip/run_supervisor.sh" >/dev/null 2>&1 || true
 pkill -f "/opt/supoclip/openrouter_router.py" >/dev/null 2>&1 || true
 pkill -f "src.workers.run_workers" >/dev/null 2>&1 || true
+pkill -f "src.workers.tasks.WorkerSettings" >/dev/null 2>&1 || true
+pkill -f "src.workers.cron_worker.CronWorkerSettings" >/dev/null 2>&1 || true
 pkill -f "src.workers.ai_worker.AIWorkerSettings" >/dev/null 2>&1 || true
 pkill -f "uvicorn src.main:app" >/dev/null 2>&1 || true
 pkill -f "server-request-timeout.cjs" >/dev/null 2>&1 || true

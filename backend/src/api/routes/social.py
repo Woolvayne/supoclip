@@ -254,18 +254,59 @@ async def list_posts(
 
 @router.post("/captions")
 async def generate_caption(request: Request, db: AsyncSession = Depends(get_db)):
-    """Draft a social caption without publishing or scheduling anything."""
+    """Draft a social caption (and hashtags/title) without publishing or scheduling anything."""
     ctx = await _allowed_context(request, db)
     body = await _json_body(request)
     for field in ("task_id", "clip_id", "provider"):
         if not isinstance(body.get(field), str) or not body[field].strip():
             raise HTTPException(status_code=422, detail=f"{field} is required")
+    include_hashtags = bool(body.get("include_hashtags", True))
     try:
         return await _service(request, db).generate_caption(
             ctx.user_id,
             task_id=body["task_id"],
             clip_id=body["clip_id"],
             provider=body["provider"],
+            include_hashtags=include_hashtags,
+            team_id=ctx.team_id,
+        )
+    except SocialError as exc:
+        raise _http_error(exc)
+
+
+@router.post("/auto-publish")
+async def auto_publish(request: Request, db: AsyncSession = Depends(get_db)):
+    """Auto-generate caption, hashtags, and title per clip and publish now or staggered over upcoming hours."""
+    ctx = await _allowed_context(request, db)
+    body = await _json_body(request)
+    task_id = body.get("task_id")
+    if not isinstance(task_id, str) or not task_id.strip():
+        raise HTTPException(status_code=422, detail="task_id is required")
+    raw_clip_ids = body.get("clip_ids")
+    clip_ids = (
+        [str(cid) for cid in raw_clip_ids if cid]
+        if isinstance(raw_clip_ids, list)
+        else None
+    )
+    raw_account_ids = body.get("social_account_ids")
+    social_account_ids = (
+        [str(aid) for aid in raw_account_ids if aid]
+        if isinstance(raw_account_ids, list)
+        else None
+    )
+    mode = str(body.get("mode") or "staggered")
+    try:
+        interval_minutes = int(body.get("interval_minutes") or 60)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="interval_minutes must be an integer")
+    try:
+        return await _service(request, db).auto_publish_clips(
+            ctx.user_id,
+            task_id=task_id.strip(),
+            clip_ids=clip_ids,
+            social_account_ids=social_account_ids,
+            mode=mode,
+            interval_minutes=interval_minutes,
             team_id=ctx.team_id,
         )
     except SocialError as exc:

@@ -35,3 +35,38 @@ async def test_rejects_invalid_caption(monkeypatch, output):
     ))
     with pytest.raises(ValueError):
         await captions.generate_social_caption("test-key", {"text": "Transcript"}, "youtube")
+
+
+async def test_generate_social_post_metadata_parses_json_and_hashtags(monkeypatch):
+    payload = json.dumps({
+        "title": "Warum 90% beim Investieren scheitern",
+        "caption": "Der häufigste Fehler kostet dich Jahre an Rendite. Hier ist die einfache Lösung.",
+        "hashtags": ["#Finanzen", "aktien", " Börse ", "shorts"],
+    })
+    monkeypatch.setattr(captions, "Agent", lambda *args, **kwargs: SimpleNamespace(
+        run=AsyncMock(return_value=SimpleNamespace(output=f"```json\n{payload}\n```"))
+    ))
+    meta = await captions.generate_social_post_metadata(
+        "test-key",
+        {"hook_title": "Warum 90% scheitern", "text": "Der häufigste Fehler beim Investieren..."},
+        "buffer",
+    )
+    assert meta["title"] == "Warum 90% scheitern"
+    assert "Rendite" in meta["caption"]
+    assert meta["hashtags"] == ["finanzen", "aktien", "börse", "shorts"]
+
+
+async def test_generate_social_post_metadata_falls_back_cleanly_on_error(monkeypatch):
+    monkeypatch.setattr(captions, "Agent", lambda *args, **kwargs: SimpleNamespace(
+        run=AsyncMock(side_effect=RuntimeError("rate limited"))
+    ))
+    meta = await captions.generate_social_post_metadata(
+        "test-key",
+        {"hook_title": "Drei Produktivitäts-Tricks", "text": "Starte jeden Morgen mit Fokus und Klarheit."},
+        "buffer",
+        allow_fallback=True,
+    )
+    assert meta["title"] == "Drei Produktivitäts-Tricks"
+    assert "Starte jeden Morgen" in meta["caption"]
+    assert len(meta["hashtags"]) >= 3
+

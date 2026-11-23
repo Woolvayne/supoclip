@@ -139,6 +139,27 @@ class FakeRepo:
     async def get_post(self, db, post_id):
         return dict(self.posts[post_id]) if post_id in self.posts else None
 
+    async def list_posts(
+        self,
+        db,
+        user_id,
+        *,
+        task_id=None,
+        clip_id=None,
+        status=None,
+        limit=100,
+        team_id=None,
+    ):
+        items = [
+            dict(p)
+            for p in self.posts.values()
+            if p.get("user_id") == user_id
+            and (task_id is None or p.get("task_id") == task_id)
+            and (clip_id is None or p.get("clip_id") == clip_id)
+            and (status is None or p.get("status") == status)
+        ]
+        return items[:limit]
+
     async def get_user_post(self, db, user_id, post_id):
         post = await self.get_post(db, post_id)
         return post if post and post["user_id"] == user_id else None
@@ -268,6 +289,13 @@ class FakeClipRepo:
 
     async def get_clip_by_id(self, db, clip_id):
         return self.clips.get(clip_id)
+
+    async def get_clips_by_task(self, db, task_id):
+        return [
+            dict(c)
+            for c in self.clips.values()
+            if c.get("task_id") == task_id
+        ]
 
 
 class FakeTaskRepo:
@@ -1880,4 +1908,101 @@ async def test_buffer_api_key_connection_and_mp4_publish(service, monkeypatch):
     # Also verify .mp4 suffix resolves back to the underlying file path
     resolved = await service.get_public_media_reference(f"{post['media_token']}.mp4")
     assert resolved == post["source_file_path"]
+
+
+async def test_auto_publish_staggered_and_single_clip_with_auto_caption_and_hashtags(
+    service, monkeypatch, tmp_path
+):
+    from unittest.mock import AsyncMock
+    from src.services import social_caption_service
+    from src.social.buffer import BufferProvider
+
+    service.config.self_host = True
+    service.config.social_publishing_providers = ("youtube", "buffer")
+
+    clip2_path = tmp_path / "clip2.mp4"
+    clip2_path.write_bytes(b"video2")
+    clip3_path = tmp_path / "clip3.mp4"
+    clip3_path.write_bytes(b"video3")
+    service.clip_repo.clips["clip-2"] = {
+        "id": "clip-2",
+        "task_id": "task-1",
+        "file_path": str(clip2_path),
+        "hook_title": "Hook Two",
+        "hook_type": "statement",
+        "text": "Zweiter Clip Transkript",
+        "duration": 25.0,
+        "virality_score": 85,
+        "clip_order": 2,
+    }
+    service.clip_repo.clips["clip-3"] = {
+        "id": "clip-3",
+        "task_id": "task-1",
+        "file_path": str(clip3_path),
+        "hook_title": "Hook Three",
+        "hook_type": "story",
+        "text": "Dritter Clip Transkript",
+        "duration": 29.0,
+        "virality_score": 78,
+        "clip_order": 3,
+    }
+    service.repo.clips = service.clip_repo.clips
+
+    buf_provider = BufferProvider()
+    monkeypatch.setattr(
+        buf_provider,
+        "list_channels",
+        lambda token: [
+            AccountProfile(
+                external_account_id="ch_tt",
+                display_name="TikTok · @demo",
+                username="demo",
+                metadata={"channel_id": "ch_tt", "service": "tiktok"},
+            ),
+            AccountProfile(
+                external_account_id="ch_ig",
+                display_name="Instagram · @demo",
+                username="demo",
+                metadata={"channel_id": "ch_ig", "service": "instagram"},
+            ),
+        ],
+    )
+    monkeypatch.setattr(social_module, "get_provider", lambda name, cfg=None: buf_provider)
+    await service.connect_buffer_api_key("user-1", "buf-key-123")
+
+    service.config.anthropic_api_key = "test-key"
+    monkeypatch.setattr(
+        social_caption_service,
+        "generate_social_post_metadata",
+        AsyncMock(
+            side_effect=lambda _key, clip, _prov, **kw: {
+                "title": clip["hook_title"],
+                "caption": f"Auto caption for {clip['id']}",
+                "hashtags": ["viral", "shorts", clip["id"].replace("-", "")],
+            }
+        ),
+    )
+
+    # 1) Single-clip direct post ("now") on clip-1
+    single_res = await service.auto_publish_clips(
+        "user-1", task_id="task-1", clip_ids=["clip-1"], mode="now"
+    )
+    assert single_res["clips_published_or_scheduled"] == 1
+    assert single_res["total_posts"] == 2  # both Buffer channels!
+    assert all(p["status"] == "queued" for p in single_res["posts"])
+    assert all(p["caption"] == "Auto caption for clip-1" for p in single_res["posts"])
+    assert all(p["hashtags"] == ["viral", "shorts", "clip1"] for p in single_res["posts"])
+
+    # 2) Bulk "Alle direkt posten" ("staggered") skips already-posted clip-1 and schedules clip-2 & clip-3!
+    bulk_res = await service.auto_publish_clips(
+        "user-1", task_id="task-1", mode="staggered", interval_minutes=60
+    )
+    assert bulk_res["skipped_clips"] == 1  # clip-1 was already posted!
+    assert bulk_res["clips_published_or_scheduled"] == 2  # clip-2 (now) + clip-3 (+60m)
+    assert bulk_res["total_posts"] == 4
+    clip2_posts = [p for p in bulk_res["posts"] if p["clip_id"] == "clip-2"]
+    clip3_posts = [p for p in bulk_res["posts"] if p["clip_id"] == "clip-3"]
+    assert all(p["status"] == "queued" for p in clip2_posts)
+    assert all(p["status"] == "scheduled" and p["scheduled_for"] is not None for p in clip3_posts)
+
 

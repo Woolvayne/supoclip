@@ -67,6 +67,7 @@ _PROVIDER_FLAG_GATES: dict[str, tuple[str, str]] = {
 PUBLISH_JOB_NAME = "publish_social_post"
 OAUTH_STATE_TTL_SECONDS = 600
 MEDIA_TOKEN_TTL_HOURS = 3
+BUFFER_MEDIA_TOKEN_TTL_HOURS = 168
 # Instagram fetches the video while it processes the container (polled for up
 # to 10 minutes), so presigned S3 URLs outlive one publish attempt comfortably.
 PUBLIC_MEDIA_URL_TTL_SECONDS = MEDIA_TOKEN_TTL_HOURS * 3600
@@ -373,6 +374,66 @@ class SocialService:
         )
         return account
 
+    async def connect_buffer_api_key(
+        self,
+        user_id: str,
+        api_key: Optional[str] = None,
+        *,
+        team_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Validate a Buffer personal API key and upsert all active Buffer channels."""
+        from ..social.buffer import BufferProvider, normalize_buffer_token
+
+        provider = self._provider("buffer")
+        await self._ensure_not_paused("buffer", user_id)
+        assert isinstance(provider, BufferProvider)
+
+        token = normalize_buffer_token(api_key or self.config.buffer_api_key or "")
+        if not token:
+            raise SocialValidationError(
+                "Enter your Buffer API key from publish.buffer.com/settings/api."
+            )
+
+        try:
+            profiles = await self._call_provider(provider.list_channels, token)
+        except SocialProviderError as exc:
+            raise SocialValidationError(str(exc)) from exc
+
+        if not profiles:
+            raise SocialValidationError(
+                "Connected to Buffer, but no social channels were found in your Buffer "
+                "organization. Connect TikTok, Instagram, or YouTube inside Buffer first, "
+                "then try again."
+            )
+
+        encrypted_token = encrypt_setting_value(token)
+        connected_accounts: List[Dict[str, Any]] = []
+        for profile in profiles:
+            account = await self.repo.upsert_account(
+                self.db,
+                user_id=user_id,
+                provider="buffer",
+                external_account_id=profile.external_account_id,
+                display_name=profile.display_name,
+                username=profile.username,
+                avatar_url=profile.avatar_url,
+                access_token_encrypted=encrypted_token,
+                refresh_token_encrypted=None,
+                token_expires_at=None,
+                scopes="graphql",
+                metadata=profile.metadata,
+                **_team_kw(team_id),
+            )
+            connected_accounts.append(account)
+
+        logger.info(
+            "Connected %d Buffer channel(s) for user %s (team=%s)",
+            len(connected_accounts),
+            user_id,
+            team_id,
+        )
+        return connected_accounts
+
     async def disconnect(
         self, user_id: str, account_id: str, *, team_id: Optional[str] = None
     ) -> bool:
@@ -514,10 +575,19 @@ class SocialService:
             raise SocialValidationError("Unsupported social platform")
         if not (clip.get("text") or "").strip():
             raise SocialValidationError("This clip has no transcript to draft a caption from.")
-        if not self.config.anthropic_api_key:
+        can_use_self_host_llm = False
+        if not self.config.anthropic_api_key and self.config.self_host:
+            from ..ai import _get_missing_llm_key_error
+
+            can_use_self_host_llm = (
+                _get_missing_llm_key_error(self.config.llm, self.config) is None
+            )
+        if not self.config.anthropic_api_key and not can_use_self_host_llm:
             raise SocialProviderUnavailable("Caption generation requires ANTHROPIC_API_KEY on the server.")
         try:
-            caption = await generate_social_caption(self.config.anthropic_api_key, clip, provider)
+            caption = await generate_social_caption(
+                self.config.anthropic_api_key or "", clip, provider
+            )
         except Exception as exc:
             logger.warning("Social caption generation failed (%s)", type(exc).__name__)
             raise SocialProviderUnavailable(
@@ -771,6 +841,10 @@ class SocialService:
         platform fetches exactly what the publish attempt resolved. Returns an
         ``s3://`` reference or an existing local path.
         """
+        if not media_token:
+            return None
+        if media_token.lower().endswith(".mp4"):
+            media_token = media_token[:-4]
         if not media_token or len(media_token) > 64:
             return None
         post = await self.repo.get_post_by_media_token(self.db, media_token)
@@ -829,9 +903,10 @@ class SocialService:
             raise missing
         public_url = None
         if post.get("media_token"):
+            suffix = ".mp4" if post.get("provider") == "buffer" else ""
             public_url = (
                 f"{self.config.social_public_media_base_url}/api/social/media/"
-                f"{post['media_token']}"
+                f"{post['media_token']}{suffix}"
             )
         return reference, public_url
 
@@ -852,11 +927,16 @@ class SocialService:
             logger.info("Skipping publish for post %s in status %s", post_id, post["status"])
             return post
 
+        ttl_hours = (
+            BUFFER_MEDIA_TOKEN_TTL_HOURS
+            if post.get("provider") == "buffer"
+            else MEDIA_TOKEN_TTL_HOURS
+        )
         claimed = await self.repo.claim_post(
             self.db,
             post_id,
             media_token_expires_at=datetime.now(timezone.utc)
-            + timedelta(hours=MEDIA_TOKEN_TTL_HOURS),
+            + timedelta(hours=ttl_hours),
         )
         if not claimed:
             logger.info("Post %s was claimed or left the queue; not uploading", post_id)
@@ -1387,6 +1467,8 @@ def _fallback_post_url(
         return None
     if provider == "instagram":
         return None
+    if provider == "buffer":
+        return "https://publish.buffer.com"
     return None
 
 

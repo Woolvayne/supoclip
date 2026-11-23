@@ -23,6 +23,7 @@ from .common import (
     _WHISPER_AVAILABLE,
     _WHISPER_MODEL_CACHE,
     _whisper,
+    apply_cpu_core_limit,
     logger,
 )
 from .ffmpeg import (
@@ -181,6 +182,7 @@ def _get_whisper_model(model_name: str = "base"):
             "Whisper is not installed. Install it with: uv add openai-whisper"
         )
     if model_name not in _WHISPER_MODEL_CACHE:
+        apply_cpu_core_limit()
         logger.info("Loading Whisper model: %s", model_name)
         _WHISPER_MODEL_CACHE[model_name] = _whisper.load_model(model_name)
     return _WHISPER_MODEL_CACHE[model_name]
@@ -194,6 +196,7 @@ def transcribe_with_whisper(
     ``language`` None lets Whisper detect it; AssemblyAI-style codes such as
     ``en_us`` are reduced to the ISO 639-1 base Whisper expects.
     """
+    apply_cpu_core_limit()
     audio_path = _prepare_audio_for_transcription(video_path)
     model = _get_whisper_model(model_name)
     whisper_language = language.split("_", 1)[0] if language else None

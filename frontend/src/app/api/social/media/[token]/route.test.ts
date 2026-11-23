@@ -52,4 +52,26 @@ describe("/api/social/media/[token]", () => {
     expect(response.headers.get("content-range")).toBe("bytes 0-10/11");
     await expect(response.text()).resolves.toBe("video-bytes");
   });
+
+  it("strips an optional .mp4 extension for Buffer video ingestion URLs", async () => {
+    vi.mocked(fetchBackend).mockResolvedValue(
+      new Response("mp4-bytes", {
+        status: 200,
+        headers: { "Content-Type": "video/mp4" },
+      }),
+    );
+    const token = "abcdefghijklmnopqrstuvwxyz012345";
+
+    const response = await GET(
+      new Request(`http://localhost/api/social/media/${token}.mp4`),
+      { params: Promise.resolve({ token: `${token}.mp4` }) },
+    );
+
+    expect(fetchBackend).toHaveBeenCalledWith(
+      `/social/media/${token}`,
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(response.status).toBe(200);
+    await expect(response.text()).resolves.toBe("mp4-bytes");
+  });
 });

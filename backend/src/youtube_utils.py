@@ -8,6 +8,7 @@ from datetime import datetime
 import logging
 import math
 import json
+import shutil
 import uuid
 import re
 import time
@@ -107,7 +108,20 @@ class YouTubeDownloader:
             "age_limit": None,
         }
 
-        return opts
+        return _apply_ytdlp_runtime_options(opts)
+
+
+def _apply_ytdlp_runtime_options(opts: Dict[str, Any]) -> Dict[str, Any]:
+    """Attach optional PO-token provider and Deno JS solver for direct self-host downloads."""
+    runtime = get_config()
+    pot_url = (getattr(runtime, "youtube_pot_provider_url", "") or "").strip()
+    if pot_url:
+        extractor_args = dict(opts.get("extractor_args") or {})
+        extractor_args.setdefault("youtubepot-bgutilhttp", {"base_url": [pot_url]})
+        opts["extractor_args"] = extractor_args
+    if shutil.which("deno") and "js_runtimes" not in opts:
+        opts["js_runtimes"] = {"deno": {}}
+    return opts
 
 
 def _build_info_options(task_id: Optional[str] = None) -> Dict[str, Any]:
@@ -135,6 +149,8 @@ def _build_info_options(task_id: Optional[str] = None) -> Dict[str, Any]:
         ydl_opts.update(base_proxy_params(task_id))
         ydl_opts["skip_download"] = True
         ydl_opts["quiet"] = True
+    else:
+        _apply_ytdlp_runtime_options(ydl_opts)
     return ydl_opts
 
 

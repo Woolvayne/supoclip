@@ -1,4 +1,4 @@
-export type SocialProviderId = "youtube" | "tiktok" | "instagram";
+export type SocialProviderId = "youtube" | "tiktok" | "instagram" | "buffer";
 
 export type SocialPrivacyLevel = "public" | "unlisted" | "private";
 
@@ -13,6 +13,8 @@ export type SocialPostStatus =
 export interface SocialProviderStatus {
   provider: SocialProviderId;
   display_name: string;
+  auth_type?: "oauth" | "api_key";
+  has_server_api_key?: boolean;
   configured: boolean;
   /** Turned off for now by the `tiktok_publishing` feature flag; reported as unconfigured too. */
   paused?: boolean;
@@ -119,6 +121,7 @@ export const PROVIDER_LABELS: Record<SocialProviderId, string> = {
   youtube: "YouTube Shorts",
   tiktok: "TikTok",
   instagram: "Instagram Reels",
+  buffer: "Buffer",
 };
 
 export const PRIVACY_LABELS: Record<SocialPrivacyLevel, string> = {

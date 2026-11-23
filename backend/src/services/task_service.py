@@ -152,6 +152,11 @@ _GENERIC_ERROR = "Something went wrong while generating your clips. Retry genera
 def user_facing_error(error: Exception) -> str:
     """What the task page shows for ``error``. The real one stays in the logs."""
     if type(error) is RuntimeError or isinstance(error, _INTERNAL_ERRORS):
+        cfg = get_config()
+        if cfg.self_host and cfg.self_host_verbose_errors:
+            detail = (str(error) or "").strip()
+            if detail:
+                return f"{_GENERIC_ERROR} ({type(error).__name__}: {detail[:300]})"
         return _GENERIC_ERROR
     return str(error) or _GENERIC_ERROR
 

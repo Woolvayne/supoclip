@@ -19,7 +19,16 @@ Return only the ready-to-edit caption, not subtitles or a transcript dump."""
 
 
 async def generate_social_caption(api_key: str, clip: dict, provider: str) -> str:
-    model = AnthropicModel(CAPTION_MODEL, provider=AnthropicProvider(api_key=api_key))
+    if api_key:
+        model = AnthropicModel(CAPTION_MODEL, provider=AnthropicProvider(api_key=api_key))
+    else:
+        from .. import ai
+        from ..config import get_config
+        from ..runtime_settings import apply_settings_to_process_env
+
+        cfg = get_config()
+        apply_settings_to_process_env(cfg.as_runtime_settings())
+        model = ai._build_transcript_model(cfg)
     agent = Agent(
         model, output_type=str, system_prompt=CAPTION_PROMPT,
         model_settings={"max_tokens": 2048}, retries=1,

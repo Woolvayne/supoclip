@@ -37,16 +37,57 @@ def clamp_even(value: int, minimum: int, maximum: int) -> int:
     return round_to_even(max(minimum, min(value, maximum)))
 
 
+def _apply_ffmpeg_thread_limit(
+    command: List[str], max_cores: Optional[int]
+) -> List[str]:
+    """Insert ``-threads N`` right after ``-c:v <encoder>`` when SUPOCLIP_MAX_CPU_CORES is set.
+
+    Placing ``-threads`` before ``-i`` breaks synthetic demuxers (``-f lavfi``,
+    ``-f rawvideo``), and stream copies (``-c:v copy``) do not encode frames, so
+    we only attach ``-threads`` to active video encoders such as ``libx264``.
+    """
+    if not max_cores or max_cores <= 0 or not command:
+        return command
+    binary = Path(command[0]).name.lower()
+    if binary not in {"ffmpeg", "ffmpeg.exe"} or "-threads" in command:
+        return command
+    adjusted: List[str] = []
+    injected = False
+    idx = 0
+    while idx < len(command):
+        token = command[idx]
+        adjusted.append(token)
+        if (
+            not injected
+            and token in {"-c:v", "-vcodec"}
+            and idx + 1 < len(command)
+        ):
+            encoder = command[idx + 1]
+            adjusted.append(encoder)
+            if encoder.strip().lower() != "copy":
+                adjusted.extend(["-threads", str(int(max_cores))])
+                injected = True
+            idx += 2
+            continue
+        idx += 1
+    return adjusted
+
+
 def run_ffmpeg_command(command: List[str], timeout: int = 900) -> subprocess.CompletedProcess:
     """Run ffmpeg/ffprobe and log stderr on failure."""
+    effective_command = _apply_ffmpeg_thread_limit(command, get_config().max_cpu_cores)
     result = subprocess.run(
-        command,
+        effective_command,
         capture_output=True,
         text=True,
         timeout=timeout,
     )
     if result.returncode != 0:
-        logger.error("Command failed: %s\n%s", " ".join(command), result.stderr[-4000:])
+        logger.error(
+            "Command failed: %s\n%s",
+            " ".join(effective_command),
+            result.stderr[-4000:],
+        )
     return result
 
 

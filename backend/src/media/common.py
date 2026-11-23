@@ -212,3 +212,37 @@ KENBURNS_SUPERSAMPLE_H = 2880
 UPSCALE_SHARPEN_FILTER = "unsharp=5:5:0.6:5:5:0.0"
 
 VERTICAL_SCALE_CHAIN = f"scale=1080:1920:flags=lanczos,{UPSCALE_SHARPEN_FILTER},setsar=1"
+
+
+def apply_cpu_core_limit(max_cores: Optional[int] = None) -> Optional[int]:
+    """Bound OpenCV, PyTorch, and BLAS/OMP worker pools when SUPOCLIP_MAX_CPU_CORES is set."""
+    import os
+
+    cores = max_cores if max_cores is not None else get_config().max_cpu_cores
+    if not cores or cores <= 0:
+        return None
+    val = str(int(cores))
+    for env_key in (
+        "OMP_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+        "TORCH_NUM_THREADS",
+    ):
+        os.environ[env_key] = val
+    try:
+        cv2.setNumThreads(int(cores))
+    except Exception:  # pragma: no cover - optional OpenCV build variation
+        pass
+    try:
+        import torch
+
+        torch.set_num_threads(int(cores))
+    except Exception:  # pragma: no cover - optional torch runtime state
+        pass
+    return int(cores)
+
+
+apply_cpu_core_limit()
+

@@ -105,7 +105,9 @@ def test_provider_allowlist_configuration(monkeypatch, value, expected):
 
 def test_provider_allowlist_defaults_and_rejects_typos(monkeypatch):
     monkeypatch.delenv("SOCIAL_PUBLISHING_PROVIDERS", raising=False)
-    assert Config().social_publishing_providers == frozenset({"youtube", "tiktok", "instagram"})
+    assert Config().social_publishing_providers == frozenset(
+        {"youtube", "tiktok", "instagram", "buffer"}
+    )
     monkeypatch.setenv("SOCIAL_PUBLISHING_PROVIDERS", "youtub")
     with pytest.raises(ValueError, match="SOCIAL_PUBLISHING_PROVIDERS"):
         Config()
@@ -718,3 +720,222 @@ def test_tiktok_profile_only_requests_basic_scope_fields():
     assert profile.external_account_id == "o1"
     assert profile.display_name == "Creator"
     assert profile.username is None
+
+
+# ----------------------------------------------------------------------
+# Buffer (GraphQL API)
+# ----------------------------------------------------------------------
+def test_buffer_lists_active_channels_across_organizations():
+    from src.social.buffer import BufferProvider
+
+    session = FakeSession(
+        {
+            ("POST", "api.buffer.com"): [
+                FakeResponse(
+                    200,
+                    {"data": {"account": {"organizations": [{"id": "org_1", "name": "Studio"}]}}},
+                ),
+                FakeResponse(
+                    200,
+                    {
+                        "data": {
+                            "channels": [
+                                {
+                                    "id": "ch_ig",
+                                    "name": "supoclip",
+                                    "displayName": "SupoClip IG",
+                                    "descriptor": "Instagram Business",
+                                    "service": "instagram",
+                                    "avatar": "https://cdn.example/ig.png",
+                                    "isDisconnected": False,
+                                },
+                                {
+                                    "id": "ch_tt",
+                                    "name": "supoclip_tt",
+                                    "displayName": "supoclip_tt",
+                                    "descriptor": "TikTok Profile",
+                                    "service": "tiktok",
+                                    "avatar": "",
+                                    "isDisconnected": False,
+                                },
+                                {
+                                    "id": "ch_dead",
+                                    "name": "old",
+                                    "displayName": "Old Account",
+                                    "service": "twitter",
+                                    "avatar": "",
+                                    "isDisconnected": True,
+                                },
+                            ]
+                        }
+                    },
+                ),
+            ]
+        }
+    )
+    provider = BufferProvider(_config(), session=session)
+    channels = provider.list_channels("Bearer buf-secret-key")
+    assert [c.external_account_id for c in channels] == ["ch_ig", "ch_tt"]
+    assert channels[0].display_name == "Instagram · SupoClip IG"
+    assert channels[0].username == "supoclip"
+    assert channels[0].metadata["service"] == "instagram"
+    assert channels[1].display_name == "TikTok · supoclip_tt"
+    assert channels[1].username is None
+    sent_auth = session.calls[0][2]["headers"]["Authorization"]
+    assert sent_auth == "Bearer buf-secret-key"
+
+
+def test_buffer_publish_instagram_reel_and_youtube_metadata(clip_file):
+    from src.social.base import PublishRequest
+    from src.social.buffer import BufferProvider
+
+    session = FakeSession(
+        {
+            ("POST", "api.buffer.com"): [
+                FakeResponse(
+                    200,
+                    {
+                        "data": {
+                            "createPost": {
+                                "__typename": "PostActionSuccess",
+                                "post": {"id": "post_ig_1", "status": "sent"},
+                            }
+                        }
+                    },
+                ),
+                FakeResponse(
+                    200,
+                    {
+                        "data": {
+                            "createPost": {
+                                "__typename": "PostActionSuccess",
+                                "post": {"id": "post_yt_1", "status": "scheduled"},
+                            }
+                        }
+                    },
+                ),
+            ]
+        }
+    )
+    provider = BufferProvider(_config(), session=session)
+
+    ig_res = provider.publish(
+        "buf-key",
+        PublishRequest(
+            file_path=clip_file,
+            title="Hook title",
+            caption="Great clip",
+            hashtags=["shorts", "ai"],
+            privacy_level="public",
+            public_media_url="https://app.example/api/social/media/tok123.mp4",
+            account_metadata={"channel_id": "ch_ig", "service": "instagram"},
+        ),
+    )
+    assert ig_res.external_post_id == "post_ig_1"
+    ig_input = session.calls[0][2]["json"]["variables"]["input"]
+    assert ig_input["channelId"] == "ch_ig"
+    assert ig_input["mode"] == "shareNow"
+    assert ig_input["metadata"] == {"instagram": {"type": "reel", "shouldShareToFeed": True}}
+    assert ig_input["assets"] == [
+        {
+            "video": {
+                "url": "https://app.example/api/social/media/tok123.mp4",
+                "metadata": {"thumbnailOffset": 2000},
+            }
+        }
+    ]
+
+    yt_res = provider.publish(
+        "buf-key",
+        PublishRequest(
+            file_path=clip_file,
+            title="Why CPU caps matter",
+            caption="Deep dive",
+            hashtags=["devops"],
+            privacy_level="unlisted",
+            public_media_url="https://app.example/api/social/media/tok456.mp4",
+            account_metadata={"channel_id": "ch_yt", "service": "youtube"},
+        ),
+    )
+    assert yt_res.external_post_id == "post_yt_1"
+    yt_input = session.calls[1][2]["json"]["variables"]["input"]
+    assert yt_input["metadata"]["youtube"]["privacy"] == "unlisted"
+    assert yt_input["metadata"]["youtube"]["categoryId"] == "22"
+    assert "metadata" not in yt_input["assets"][0]["video"]
+
+
+def test_buffer_retries_with_notification_for_personal_instagram_profile(clip_file):
+    from src.social.base import PublishRequest
+    from src.social.buffer import BufferProvider
+
+    session = FakeSession(
+        {
+            ("POST", "api.buffer.com"): [
+                FakeResponse(
+                    200,
+                    {
+                        "data": {
+                            "createPost": {
+                                "__typename": "MutationError",
+                                "message": "Instagram personal profile posts require notification scheduling.",
+                            }
+                        }
+                    },
+                ),
+                FakeResponse(
+                    200,
+                    {
+                        "data": {
+                            "createPost": {
+                                "__typename": "PostActionSuccess",
+                                "post": {"id": "post_reminder_1", "status": "scheduled"},
+                            }
+                        }
+                    },
+                ),
+            ]
+        }
+    )
+    provider = BufferProvider(_config(), session=session)
+    res = provider.publish(
+        "buf-key",
+        PublishRequest(
+            file_path=clip_file,
+            title="Title",
+            caption="Caption",
+            hashtags=[],
+            privacy_level="public",
+            public_media_url="https://app.example/api/social/media/tok789.mp4",
+            account_metadata={"channel_id": "ch_ig_personal", "service": "instagram"},
+        ),
+    )
+    assert res.external_post_id == "post_reminder_1"
+    assert session.calls[0][2]["json"]["variables"]["input"]["schedulingType"] == "automatic"
+    assert session.calls[1][2]["json"]["variables"]["input"]["schedulingType"] == "notification"
+
+
+def test_buffer_rejects_non_https_url_and_marks_401_reauth(clip_file):
+    from src.social.base import PublishRequest
+    from src.social.buffer import BufferProvider
+
+    provider = BufferProvider(_config(), session=FakeSession({}))
+    with pytest.raises(SocialProviderError) as https_err:
+        provider.publish(
+            "buf-key",
+            PublishRequest(
+                file_path=clip_file,
+                title="t",
+                caption="c",
+                hashtags=[],
+                privacy_level="public",
+                public_media_url="http://localhost:3000/api/social/media/tok.mp4",
+                account_metadata={"channel_id": "ch_1", "service": "tiktok"},
+            ),
+        )
+    assert https_err.value.rejected is True
+
+    unauth_session = FakeSession({("POST", "api.buffer.com"): FakeResponse(401, {"error": "Unauthorized"})})
+    with pytest.raises(SocialProviderError) as auth_err:
+        BufferProvider(_config(), session=unauth_session).list_channels("bad-key")
+    assert auth_err.value.reauth is True
+

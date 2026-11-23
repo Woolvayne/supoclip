@@ -14,7 +14,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, TypeVar
 
 import requests
 
-SUPPORTED_PROVIDERS = ("youtube", "tiktok", "instagram")
+SUPPORTED_PROVIDERS = ("youtube", "tiktok", "instagram", "buffer")
 
 # Privacy levels are normalized across providers. Each provider maps these to
 # its own vocabulary and may reject some (e.g. unaudited TikTok apps can only

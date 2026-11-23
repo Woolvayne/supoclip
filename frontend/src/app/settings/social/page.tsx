@@ -8,7 +8,10 @@ import {
   AlertCircle,
   CheckCircle,
   ChevronRight,
+  ExternalLink,
   Info,
+  KeyRound,
+  Loader2,
   RefreshCw,
   Trash2,
 } from "lucide-react";
@@ -17,6 +20,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScheduledPosts } from "@/components/scheduled-posts";
@@ -64,6 +69,9 @@ function SocialSettingsContent() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
+  const [bufferFormOpen, setBufferFormOpen] = useState(false);
+  const [bufferApiKey, setBufferApiKey] = useState("");
+  const [isConnectingBuffer, setIsConnectingBuffer] = useState(false);
 
   const load = useCallback(async () => {
     setIsFetching(true);
@@ -132,6 +140,35 @@ function SocialSettingsContent() {
       setError(err instanceof Error ? err.message : t("page.disconnectError"));
     } finally {
       setDisconnectingId(null);
+    }
+  };
+
+  const handleBufferConnect = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setIsConnectingBuffer(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await fetch("/api/social/connections/buffer/api-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: bufferApiKey.trim() || undefined }),
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        total?: number;
+        detail?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data?.detail || t("page.loadError"));
+      }
+      setBufferApiKey("");
+      setBufferFormOpen(false);
+      setNotice(t("page.bufferConnectedCount", { count: data.total ?? 1 }));
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("page.loadError"));
+    } finally {
+      setIsConnectingBuffer(false);
     }
   };
 
@@ -256,12 +293,24 @@ function SocialSettingsContent() {
                         </TooltipContent>
                       </Tooltip>
                       {provider.configured && (
-                        <Button asChild size="sm" variant="outline">
-                          <a href={`/api/social/connect/${provider.provider}`}>
+                        provider.provider === "buffer" || provider.auth_type === "api_key" ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setBufferFormOpen((open) => !open)}
+                          >
+                            <KeyRound className="size-3.5" />
                             {t("page.connect")}
-                            <ChevronRight className="size-4" />
-                          </a>
-                        </Button>
+                          </Button>
+                        ) : (
+                          <Button asChild size="sm" variant="outline">
+                            <a href={`/api/social/connect/${provider.provider}`}>
+                              {t("page.connect")}
+                              <ChevronRight className="size-4" />
+                            </a>
+                          </Button>
+                        )
                       )}
                     </div>
                   </div>
@@ -269,6 +318,65 @@ function SocialSettingsContent() {
               </div>
             ))}
           </div>
+        )}
+        {bufferFormOpen && (
+          <form
+            onSubmit={handleBufferConnect}
+            className="mt-3 space-y-3 rounded-xl border bg-background p-4"
+          >
+            <div className="space-y-1">
+              <p className="text-sm font-medium">{t("page.bufferConnectTitle")}</p>
+              <p className="text-xs text-muted-foreground">
+                {t("page.bufferConnectBody")}{" "}
+                <a
+                  href="https://publish.buffer.com/settings/api"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 font-medium text-foreground underline underline-offset-4"
+                >
+                  publish.buffer.com/settings/api
+                  <ExternalLink className="size-3" />
+                </a>
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="buffer-api-key" className="text-xs">
+                Buffer API Key
+              </Label>
+              <Input
+                id="buffer-api-key"
+                type="password"
+                autoComplete="off"
+                value={bufferApiKey}
+                disabled={isConnectingBuffer}
+                placeholder={t("page.bufferKeyPlaceholder")}
+                onChange={(event) => setBufferApiKey(event.target.value)}
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={isConnectingBuffer}
+                onClick={() => setBufferFormOpen(false)}
+              >
+                {t("cancel")}
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={
+                  isConnectingBuffer ||
+                  (!bufferApiKey.trim() &&
+                    !providers.find((p) => p.provider === "buffer")?.has_server_api_key)
+                }
+              >
+                {isConnectingBuffer && <Loader2 className="size-4 animate-spin" />}
+                {isConnectingBuffer ? t("page.bufferConnecting") : t("page.bufferSaveKey")}
+              </Button>
+            </div>
+          </form>
         )}
       </section>
 
@@ -323,12 +431,24 @@ function SocialSettingsContent() {
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   {connection.status === "reauth_required" && (
-                    <a href={`/api/social/connect/${connection.provider}`}>
-                      <Button size="sm" variant="outline">
+                    connection.provider === "buffer" ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setBufferFormOpen(true)}
+                      >
                         <RefreshCw className="w-4 h-4" />
                         {t("page.reconnect")}
                       </Button>
-                    </a>
+                    ) : (
+                      <a href={`/api/social/connect/${connection.provider}`}>
+                        <Button size="sm" variant="outline">
+                          <RefreshCw className="w-4 h-4" />
+                          {t("page.reconnect")}
+                        </Button>
+                      </a>
+                    )
                   )}
                   <Button
                     size="sm"

@@ -1819,3 +1819,65 @@ async def test_publish_post_ignores_notification_email_failure(service, provider
 
     assert published["status"] == "published"
     assert service.repo.posts[post["id"]]["publish_notification_sent_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_buffer_api_key_connection_and_mp4_publish(service, monkeypatch):
+    from src.social.base import AccountProfile, PublishResult
+    from src.social.buffer import BufferProvider
+
+    buf_provider = BufferProvider(service.config)
+    seen_requests = []
+
+    def fake_list_channels(token: str):
+        assert token == "buf-personal-key"
+        return [
+            AccountProfile(
+                external_account_id="ch_tiktok",
+                display_name="TikTok · @creator",
+                username="creator",
+                metadata={"channel_id": "ch_tiktok", "service": "tiktok"},
+            ),
+            AccountProfile(
+                external_account_id="ch_instagram",
+                display_name="Instagram · Creator",
+                username="creator_ig",
+                metadata={"channel_id": "ch_instagram", "service": "instagram"},
+            ),
+        ]
+
+    def fake_publish(token: str, req):
+        seen_requests.append((token, req))
+        return PublishResult(external_post_id="buf_post_1", external_url="https://publish.buffer.com")
+
+    monkeypatch.setattr(buf_provider, "list_channels", fake_list_channels)
+    monkeypatch.setattr(buf_provider, "publish", fake_publish)
+    monkeypatch.setattr(social_module, "get_provider", lambda name, cfg=None: buf_provider)
+
+    accounts = await service.connect_buffer_api_key("user-1", "Bearer buf-personal-key")
+    assert len(accounts) == 2
+    assert {a["external_account_id"] for a in accounts} == {"ch_tiktok", "ch_instagram"}
+
+    post = await service.create_post(
+        "user-1",
+        task_id="task-1",
+        clip_id="clip-1",
+        social_account_id=accounts[0]["id"],
+        title="Buffer Clip",
+        caption="Posted via Buffer",
+        hashtags=["shorts"],
+        privacy_level="public",
+        scheduled_for=None,
+    )
+    published = await service.publish_post(post["id"])
+    assert published["status"] == "published"
+    assert published["external_post_id"] == "buf_post_1"
+    assert len(seen_requests) == 1
+    sent_token, sent_req = seen_requests[0]
+    assert sent_token == "buf-personal-key"
+    assert sent_req.public_media_url.startswith("https://app.example/api/social/media/")
+    assert sent_req.public_media_url.endswith(".mp4")
+    # Also verify .mp4 suffix resolves back to the underlying file path
+    resolved = await service.get_public_media_reference(f"{post['media_token']}.mp4")
+    assert resolved == post["source_file_path"]
+

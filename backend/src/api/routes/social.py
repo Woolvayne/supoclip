@@ -138,6 +138,25 @@ async def publishing_options(
         raise _http_error(exc)
 
 
+@router.post("/connections/buffer/api-key")
+async def connect_buffer_api_key(
+    request: Request, db: AsyncSession = Depends(get_db)
+):
+    """Connect or resync Buffer channels using a personal Buffer API key."""
+    ctx = await _allowed_context(
+        request, db, session_only=True, require_team_manager=True
+    )
+    body = await _json_body(request)
+    raw_key = body.get("api_key") if isinstance(body.get("api_key"), str) else None
+    try:
+        connections = await _service(request, db).connect_buffer_api_key(
+            ctx.user_id, raw_key, team_id=ctx.team_id
+        )
+    except SocialError as exc:
+        raise _http_error(exc)
+    return {"connections": connections, "total": len(connections)}
+
+
 @router.post("/connections/{provider}/authorize")
 async def start_connection(
     provider: str, request: Request, db: AsyncSession = Depends(get_db)

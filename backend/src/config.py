@@ -303,6 +303,19 @@ class Config:
         self.instagram_app_secret = self._get_optional_env(
             "INSTAGRAM_APP_SECRET"
         ) or self._get_optional_env("META_APP_SECRET")
+        self.buffer_enabled = self._get_bool_env("BUFFER_ENABLED", True)
+        self.buffer_api_key = self._get_optional_env("BUFFER_API_KEY")
+        self.buffer_default_mode = (
+            os.getenv("BUFFER_DEFAULT_MODE", "shareNow").strip() or "shareNow"
+        )
+        if self.buffer_default_mode not in {"shareNow", "addToQueue", "shareNext"}:
+            raise ValueError(
+                "BUFFER_DEFAULT_MODE must be shareNow, addToQueue or shareNext"
+            )
+        self.max_cpu_cores = self._get_optional_positive_int_env("SUPOCLIP_MAX_CPU_CORES")
+        self.self_host_verbose_errors = self._get_bool_env(
+            "SELF_HOST_VERBOSE_ERRORS", False
+        )
         # OAuth callbacks and public media fetches (Instagram pulls the video
         # from a URL) both go through the frontend, so they default to the
         # public app URL.
@@ -340,13 +353,13 @@ class Config:
         self.social_publishing_providers = frozenset(
             provider.strip().lower()
             for provider in os.getenv(
-                "SOCIAL_PUBLISHING_PROVIDERS", "youtube,tiktok,instagram"
+                "SOCIAL_PUBLISHING_PROVIDERS", "youtube,tiktok,instagram,buffer"
             ).split(",")
             if provider.strip()
         )
-        if self.social_publishing_providers - {"youtube", "tiktok", "instagram"}:
+        if self.social_publishing_providers - {"youtube", "tiktok", "instagram", "buffer"}:
             raise ValueError(
-                "SOCIAL_PUBLISHING_PROVIDERS may only include youtube, tiktok, instagram"
+                "SOCIAL_PUBLISHING_PROVIDERS may only include youtube, tiktok, instagram, buffer"
             )
         self.social_publishing_allowed_emails = frozenset(
             email.strip().lower()
@@ -463,6 +476,17 @@ class Config:
             return int(os.getenv(name, str(default)))
         except (TypeError, ValueError):
             return default
+
+    @staticmethod
+    def _get_optional_positive_int_env(name: str) -> int | None:
+        raw = os.getenv(name)
+        if raw is None or not raw.strip():
+            return None
+        try:
+            value = int(raw.strip())
+        except (TypeError, ValueError):
+            return None
+        return value if value > 0 else None
 
     @staticmethod
     def _get_float_env(name: str, default: float) -> float:

@@ -342,12 +342,9 @@ PY
 fi
 
 echo "==> [6/6] Starte SupoClip-Dienste & pruefe Backend + Buffer-API + Frontend..."
-WIN_PS="/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
-if [[ -x "${WIN_PS}" && -f /mnt/c/SupoClip/start_supoclip.ps1 ]]; then
-  "${WIN_PS}" -NoProfile -ExecutionPolicy Bypass -File 'C:\SupoClip\start_supoclip.ps1' >/dev/null 2>&1 || true
-else
-  nohup /opt/supoclip/run_supervisor.sh >>/var/log/supoclip/supervisor.log 2>&1 </dev/null &
-fi
+# Do not invoke Windows powershell.exe from inside WSL here: WSL interop pipes
+# block waiting on long-lived child handles (caddy.exe / hidden wsl.exe).
+nohup /opt/supoclip/run_supervisor.sh >>/var/log/supoclip/supervisor.log 2>&1 </dev/null &
 
 BACKEND_OK=0
 FRONTEND_OK=0

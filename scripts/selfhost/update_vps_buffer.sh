@@ -117,66 +117,88 @@ print('    [OK] Datenbank-Tabellen & Social-Publishing-Schema bereit.')
   )
 fi
 
-echo "==> [4/6] Baue Next.js Standalone-Frontend neu (inkl. Buffer-UI & 6 Sprachen)..."
+echo "==> [4/6] Pruefe Next.js Standalone-Frontend (inkl. Auto-Post & Buffer-UI)..."
 cd "${APP_DIR}/frontend"
 
-if command -v pnpm >/dev/null 2>&1; then
-  PNPM_BIN=(pnpm)
-elif command -v corepack >/dev/null 2>&1 && corepack pnpm --version >/dev/null 2>&1; then
-  PNPM_BIN=(corepack pnpm)
-else
-  npm install -g pnpm@10.27.0
-  PNPM_BIN=(pnpm)
+FRONTEND_HASH="$(find "${APP_DIR}/frontend/src" "${APP_DIR}/frontend/messages" "${APP_DIR}/frontend/package.json" -type f -exec sha256sum {} + | sort | sha256sum | awk '{print $1}')"
+EXISTING_STANDALONE="${APP_DIR}/frontend/.next/standalone"
+if [[ -f "${EXISTING_STANDALONE}/frontend/server.js" ]]; then
+  EXISTING_STANDALONE="${EXISTING_STANDALONE}/frontend"
 fi
 
-BUILD_LIMIT_PREFIX=()
-if command -v taskset >/dev/null 2>&1 && taskset -c 0,1 true >/dev/null 2>&1; then
-  BUILD_LIMIT_PREFIX+=(taskset -c 0,1)
-fi
-if command -v nice >/dev/null 2>&1 && nice -n 10 true >/dev/null 2>&1; then
-  BUILD_LIMIT_PREFIX+=(nice -n 10)
-fi
-
-# Keep a backup of any pre-existing Prisma native query engine before regenerating
-rm -rf /tmp/supoclip_prisma_bak
-if [[ -d "${APP_DIR}/frontend/src/generated/prisma" ]]; then
-  cp -rf "${APP_DIR}/frontend/src/generated/prisma" /tmp/supoclip_prisma_bak
-fi
-
-"${PNPM_BIN[@]}" install --frozen-lockfile --ignore-scripts || "${PNPM_BIN[@]}" install --ignore-scripts
-DATABASE_URL="${SYNC_DB_URL}" "${PNPM_BIN[@]}" exec prisma generate || {
-  if [[ -d /tmp/supoclip_prisma_bak ]]; then
-    mkdir -p "${APP_DIR}/frontend/src/generated"
-    cp -rf /tmp/supoclip_prisma_bak "${APP_DIR}/frontend/src/generated/prisma"
+SKIP_FRONTEND_BUILD=0
+if [[ "${FORCE_FRONTEND_BUILD:-0}" != "1" && -f "${EXISTING_STANDALONE}/server.js" && -d "${APP_DIR}/frontend/.next/static" ]]; then
+  if [[ -f "${APP_DIR}/frontend/.next/.supoclip_frontend_hash" ]] && [[ "$(cat "${APP_DIR}/frontend/.next/.supoclip_frontend_hash" 2>/dev/null || true)" == "${FRONTEND_HASH}" ]]; then
+    SKIP_FRONTEND_BUILD=1
+  elif grep -rq "autoPostAll" "${APP_DIR}/frontend/.next" 2>/dev/null; then
+    # Already built with current Auto-Post UI; stamp hash and skip redundant rebuild
+    echo "${FRONTEND_HASH}" > "${APP_DIR}/frontend/.next/.supoclip_frontend_hash"
+    SKIP_FRONTEND_BUILD=1
   fi
-}
-rm -rf /tmp/supoclip_prisma_bak
+fi
 
-cp -f "${APP_DIR}/CHANGELOG.md" "${APP_DIR}/LICENSE" "${APP_DIR}/frontend/" 2>/dev/null || true
+if [[ "${SKIP_FRONTEND_BUILD}" == "1" ]]; then
+  echo "    [OK] Aktueller Frontend-Build ist bereits vorhanden – ueberspringe Neubau."
+else
+  if command -v pnpm >/dev/null 2>&1; then
+    PNPM_BIN=(pnpm)
+  elif command -v corepack >/dev/null 2>&1 && corepack pnpm --version >/dev/null 2>&1; then
+    PNPM_BIN=(corepack pnpm)
+  else
+    npm install -g pnpm@10.27.0
+    PNPM_BIN=(pnpm)
+  fi
 
-(
-  export NODE_ENV=production
-  export NEXT_TELEMETRY_DISABLED=1
-  export SKIP_LINT=1
-  export NODE_OPTIONS="--max-old-space-size=2560"
-  export NEXT_PUBLIC_SELF_HOST="true"
-  export NEXT_PUBLIC_APP_URL="${MAIN_URL}"
-  export NEXT_PUBLIC_API_URL="/direct-api"
-  export NEXT_PUBLIC_SOCIAL_PUBLISHING="live"
-  export DATABASE_URL="${SYNC_DB_URL}"
-  export BETTER_AUTH_SECRET="${AUTH_SEC:-selfhost-placeholder-secret-32chars}"
-  export BETTER_AUTH_URL="${MAIN_URL}"
-  export BACKEND_AUTH_SECRET="${BACK_SEC:-selfhost-placeholder-backend-secret}"
-  export BACKEND_INTERNAL_URL="http://127.0.0.1:8000"
-  ${BUILD_LIMIT_PREFIX[@]+"${BUILD_LIMIT_PREFIX[@]}"} "${PNPM_BIN[@]}" exec next build --no-lint
-)
+  BUILD_LIMIT_PREFIX=()
+  if command -v taskset >/dev/null 2>&1 && taskset -c 0,1 true >/dev/null 2>&1; then
+    BUILD_LIMIT_PREFIX+=(taskset -c 0,1)
+  fi
+  if command -v nice >/dev/null 2>&1 && nice -n 10 true >/dev/null 2>&1; then
+    BUILD_LIMIT_PREFIX+=(nice -n 10)
+  fi
+
+  # Keep a backup of any pre-existing Prisma native query engine before regenerating
+  rm -rf /tmp/supoclip_prisma_bak
+  if [[ -d "${APP_DIR}/frontend/src/generated/prisma" ]]; then
+    cp -rf "${APP_DIR}/frontend/src/generated/prisma" /tmp/supoclip_prisma_bak
+  fi
+
+  "${PNPM_BIN[@]}" install --frozen-lockfile --ignore-scripts || "${PNPM_BIN[@]}" install --ignore-scripts
+  DATABASE_URL="${SYNC_DB_URL}" "${PNPM_BIN[@]}" exec prisma generate || {
+    if [[ -d /tmp/supoclip_prisma_bak ]]; then
+      mkdir -p "${APP_DIR}/frontend/src/generated"
+      cp -rf /tmp/supoclip_prisma_bak "${APP_DIR}/frontend/src/generated/prisma"
+    fi
+  }
+  rm -rf /tmp/supoclip_prisma_bak
+
+  cp -f "${APP_DIR}/CHANGELOG.md" "${APP_DIR}/LICENSE" "${APP_DIR}/frontend/" 2>/dev/null || true
+
+  (
+    export NODE_ENV=production
+    export NEXT_TELEMETRY_DISABLED=1
+    export SKIP_LINT=1
+    export NODE_OPTIONS="--max-old-space-size=2560"
+    export NEXT_PUBLIC_SELF_HOST="true"
+    export NEXT_PUBLIC_APP_URL="${MAIN_URL}"
+    export NEXT_PUBLIC_API_URL="/direct-api"
+    export NEXT_PUBLIC_SOCIAL_PUBLISHING="live"
+    export DATABASE_URL="${SYNC_DB_URL}"
+    export BETTER_AUTH_SECRET="${AUTH_SEC:-selfhost-placeholder-secret-32chars}"
+    export BETTER_AUTH_URL="${MAIN_URL}"
+    export BACKEND_AUTH_SECRET="${BACK_SEC:-selfhost-placeholder-backend-secret}"
+    export BACKEND_INTERNAL_URL="http://127.0.0.1:8000"
+    ${BUILD_LIMIT_PREFIX[@]+"${BUILD_LIMIT_PREFIX[@]}"} "${PNPM_BIN[@]}" exec next build --no-lint
+  )
+  echo "${FRONTEND_HASH}" > "${APP_DIR}/frontend/.next/.supoclip_frontend_hash"
+fi
 
 STANDALONE_DIR="${APP_DIR}/frontend/.next/standalone"
 if [[ -f "${STANDALONE_DIR}/frontend/server.js" ]]; then
   STANDALONE_DIR="${STANDALONE_DIR}/frontend"
 fi
 
-rm -rf "${STANDALONE_DIR}/public" "${STANDALONE_DIR}/.next/static"
+rm -rf "${STANDALONE_DIR}/public" "${STANDALONE_DIR}/.next/static" "${STANDALONE_DIR}/src/generated/prisma" "${STANDALONE_DIR}/prisma"
 cp -rf "${APP_DIR}/frontend/public" "${STANDALONE_DIR}/public"
 mkdir -p "${STANDALONE_DIR}/.next"
 cp -rf "${APP_DIR}/frontend/.next/static" "${STANDALONE_DIR}/.next/static"
@@ -185,7 +207,7 @@ cp -rf "${APP_DIR}/frontend/src/generated/prisma" "${STANDALONE_DIR}/src/generat
 cp -rf "${APP_DIR}/frontend/prisma" "${STANDALONE_DIR}/prisma"
 cp -f "${APP_DIR}/frontend/server-request-timeout.cjs" "${STANDALONE_DIR}/server-request-timeout.cjs"
 cp -f "${APP_DIR}/CHANGELOG.md" "${APP_DIR}/LICENSE" "${STANDALONE_DIR}/" 2>/dev/null || true
-echo "    [OK] Standalone-Frontend aktualisiert in ${STANDALONE_DIR}"
+echo "    [OK] Standalone-Frontend bereit in ${STANDALONE_DIR}"
 
 echo "==> [5/6] Aktualisiere Supervisor-Konfiguration (2-Kern-Limit + OpenRouter :free + Buffer)..."
 cat << 'SUPERVISOR' > /opt/supoclip/run_supervisor.sh
@@ -369,12 +391,19 @@ if [[ -x "${APP_DIR}/backend/.venv/bin/python" ]]; then
     cd "${APP_DIR}/backend"
     SOCIAL_PUBLISHING_ACCESS=all SOCIAL_PUBLISHING_PROVIDERS="youtube,tiktok,instagram,buffer" BUFFER_ENABLED=true \
       "${APP_DIR}/backend/.venv/bin/python" -c "
-from src.social.registry import list_social_providers
-providers = [p.name for p in list_social_providers()]
+from src.social.registry import list_provider_status
+providers = [p['provider'] for p in list_provider_status() if p.get('configured') or p['provider'] == 'buffer']
 assert 'buffer' in providers, f'buffer missing in {providers}'
 print('    [OK] Aktive Social-Provider:', ', '.join(providers))
 "
   )
+fi
+
+HOME_BODY="$(curl -sL --max-time 5 http://127.0.0.1:3107/sign-in 2>/dev/null || true)"
+if echo "${HOME_BODY}" | grep -q "We couldn't load SupoClip"; then
+  echo "[WARNUNG] Frontend meldet SSR-Fehler. Letzte Zeilen aus frontend.log:" >&2
+  tail -n 35 /var/log/supoclip/frontend.log 2>/dev/null || true
+  exit 1
 fi
 
 if [[ "${BACKEND_OK}" != "1" ]]; then

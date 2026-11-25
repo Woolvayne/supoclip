@@ -694,6 +694,7 @@ def write_ass(
     censor_spans: Sequence[tuple[float, float]] | None = None,
     hook_title: bool | str | None = True,
     hook_heavy: bool = False,
+    watermark_text: str | None = None,
 ):
     """Write captions with the generation renderer so edits keep the clip's animation.
 
@@ -752,6 +753,7 @@ def write_ass(
         **({"hook_heavy": True} if hook_heavy else {}),
         **({"time_map": time_map} if time_map is not None else {}),
         **({"censor_spans": list(censor_spans)} if censor_spans else {}),
+        **({"watermark_text": watermark_text} if watermark_text else {}),
     )
     if not written:
         # Nothing to show (no captions or hook title): keep ffmpeg's ass filter valid.

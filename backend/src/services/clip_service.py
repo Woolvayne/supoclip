@@ -997,6 +997,9 @@ class ClipEditingMixin:
         source_url = task.get("source_url")
         source_type = task.get("source_type")
         metadata = await self._load_task_source_settings(task_id)
+        from ..media.captions import resolve_task_watermark_text
+
+        regen_watermark = resolve_task_watermark_text(metadata)
         output_format = metadata.get("output_format", "vertical")
         add_subtitles = metadata.get("add_subtitles", True)
         cleanup_payload = cleanup_settings or {
@@ -1057,7 +1060,11 @@ class ClipEditingMixin:
                     should_recompute_cleanup,
                 )
                 if planned_segment is not None:
-                    segments.append({**planned_segment, **fx_keys})
+                    segments.append({
+                        **planned_segment,
+                        **fx_keys,
+                        **({"watermark_text": regen_watermark} if regen_watermark else {}),
+                    })
                     continue
             # Workflow clips re-cut like any edited clip (a merged part) keep
             # their role and part number; a series still needs every part.
@@ -1102,6 +1109,7 @@ class ClipEditingMixin:
                     "broll": broll,
                     **workflow_fields,
                     **fx_keys,
+                    **({"watermark_text": regen_watermark} if regen_watermark else {}),
                 }
             )
 
@@ -1632,6 +1640,9 @@ class ClipEditingMixin:
                     raise ValueError("Could not prepare the clip for caption editing")
                 if not render_report.get("broll_applied"):
                     broll = []
+                from ..media.captions import resolve_task_watermark_text
+
+                edit_watermark = resolve_task_watermark_text(settings)
                 output_path = await run_in_thread(
                     overlay_custom_captions,
                     clean_path, output_dir, caption_text, position, highlight_words,
@@ -1643,6 +1654,7 @@ class ClipEditingMixin:
                     source_ranges=local_ranges,
                     position_y=position_y,
                     output_offsets=output_offsets,
+                    **({"watermark_text": edit_watermark} if edit_watermark else {}),
                 )
                 if output_short_side:
                     try:
@@ -1742,6 +1754,9 @@ class ClipEditingMixin:
                 words = await run_in_thread(_transcript_fx_words, video_path, local_ranges, local_offsets)
             overlays = await broll_overlays_for(broll)
             point_labels = point_labels_for(workflow_meta if workflow_meta is not None else clip.get("workflow_meta"))
+            from ..media.captions import resolve_task_watermark_text
+
+            fx_watermark = resolve_task_watermark_text(settings)
             with tempfile.TemporaryDirectory(prefix="fx_clip_edit_", dir=output_dir) as scratch:
                 plan, reaction_files = await _reaction_files(plan, Path(scratch))
                 rendered = await run_in_thread(
@@ -1761,6 +1776,7 @@ class ClipEditingMixin:
                     **({"point_labels": point_labels} if point_labels else {}),
                     fx=FxRenderInput(plan=plan, words=words, reaction_files=reaction_files, face_track=face_track),
                     **({"caption_override": override} if override else {}),
+                    **({"watermark_text": fx_watermark} if fx_watermark else {}),
                 )
             if not rendered or not output_path.exists():
                 raise ValueError("Could not render the edited clip")

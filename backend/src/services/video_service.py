@@ -1677,6 +1677,7 @@ class VideoService:
                     words=planned_fx.words,
                     reaction_files=planned_fx.reaction_files,
                 )} if planned_fx is not None else {}),
+                **({"watermark_text": segment["watermark_text"]} if segment.get("watermark_text") else {}),
             )
 
             if not success:
@@ -2018,6 +2019,7 @@ class VideoService:
         clip carries original-video seconds. See ``source_range.py``.
         """
         video_path: Optional[Path] = None
+        source_channel: Optional[str] = None
         audio_first = False
         checkpoint = dict(checkpoint or {})
         range_dir: Optional[Path] = None
@@ -2077,6 +2079,9 @@ class VideoService:
                     # adult account; fail before paying for fallback attempts.
                     raise YouTubeAgeRestrictedError()
                 if video_info:
+                    raw_uploader = video_info.get("uploader")
+                    if isinstance(raw_uploader, str) and raw_uploader.strip():
+                        source_channel = raw_uploader.strip()
                     duration = video_info.get("duration", 0)
                     source_duration = duration or None
                     if duration_limit and duration and duration > duration_limit and source_range is None:
@@ -2498,6 +2503,7 @@ class VideoService:
                     "analysis_json": workflow_final["analysis_json"],
                     "workflow_plan": workflow_plan,
                     "workflow_plan_restored": restored_plan,
+                    **({"source_channel": source_channel} if source_channel else {}),
                 }
 
             await save_checkpoint({"segments": segments_json})
@@ -2520,6 +2526,7 @@ class VideoService:
                         "most_relevant_segments": segments_json,
                     }
                 ),
+                **({"source_channel": source_channel} if source_channel else {}),
             }
 
         except (Exception, asyncio.CancelledError) as e:

@@ -285,6 +285,7 @@ def create_optimized_clip(
     point_labels: Optional[List[Dict[str, Any]]] = None,
     fx: Optional["FxRenderInput"] = None,
     caption_override: Optional[Dict[str, Any]] = None,
+    watermark_text: Optional[str] = None,
 ) -> bool:
     """Create clip with optional subtitles. output_format: 'vertical' (9:16) or 'original' (keep source size).
 
@@ -503,7 +504,7 @@ def create_optimized_clip(
                 time_map=None,
                 censor_spans=None,
             ) -> Optional[Path]:
-                if not (include_captions or hook or point_labels):
+                if not (include_captions or hook or point_labels or watermark_text):
                     return None
                 built = build_assemblyai_ass_subtitles(
                     video_path,
@@ -535,6 +536,7 @@ def create_optimized_clip(
                     **_interview_hook_kwargs(plan_report),
                     # A Dynamic edits clip rendered without the drawing stage: heavy outlined type, no boxes.
                     **({"hook_heavy": True} if fx is not None else {}),
+                    **({"watermark_text": watermark_text} if watermark_text else {}),
                 )
                 return ass_path if built else None
 
@@ -585,7 +587,7 @@ def create_optimized_clip(
                 if is_fx_template(caption_template)
                 else None
             )
-            if (add_subtitles or hook_title or point_labels) and build_ass(
+            if (add_subtitles or hook_title or point_labels or watermark_text) and build_ass(
                 add_subtitles, hook_title, template_override=ass_template
             ):
                 burn_ass_path = ass_path
@@ -1431,6 +1433,7 @@ def create_clips_from_segments(
                 **({"output_offsets": output_offsets} if output_offsets is not None else {}),
                 **({"point_labels": point_labels} if point_labels else {}),
                 **({"fx": fx_input} if fx_input is not None else {}),
+                **({"watermark_text": segment["watermark_text"]} if segment.get("watermark_text") else {}),
             )
 
             if success:

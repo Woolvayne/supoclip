@@ -209,6 +209,8 @@ interface TaskDetails extends WorkflowTaskFields {
   output_format?: string | null;
   clip_length?: string | null;
   add_subtitles?: boolean | null;
+  source_channel?: string | null;
+  source_watermark?: boolean | null;
   error_code?: string | null;
   /** Dynamic edits as stored (`tasks.edit_style`); null or absent when off. */
   edit_style?: unknown;
@@ -1153,6 +1155,21 @@ export default function TaskPage() {
                 </a>
               ) : (
                 <span className="flex items-center gap-1.5"><VideoSourceIcon source={videoSourceKind(task.source_type)} className="size-3.5" aria-hidden />{sourceLabel(videoSourceKind(task.source_type), tLibrary("card.upload"))}</span>
+              )}
+              {task.source_channel && task.source_watermark !== false && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      data-testid="source-credit-badge"
+                      className="inline-flex max-w-[220px] items-center truncate rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300"
+                    >
+                      {t("sourceCreditBadge", { channel: task.source_channel })}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {t("sourceCreditTooltip", { channel: task.source_channel })}
+                  </TooltipContent>
+                </Tooltip>
               )}
               <Tooltip>
                 <TooltipTrigger asChild>

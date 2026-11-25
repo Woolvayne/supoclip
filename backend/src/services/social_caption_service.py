@@ -3,7 +3,7 @@
 import asyncio
 import json
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pydantic_ai import Agent
 from pydantic_ai.models.anthropic import AnthropicModel
@@ -100,7 +100,57 @@ def _extract_keyword_hashtags(clip: Dict[str, Any], limit: int = 5) -> List[str]
     return tags[:limit]
 
 
-def fallback_social_post_metadata(clip: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_credit_channel(source_channel: Optional[str]) -> Optional[str]:
+    if not isinstance(source_channel, str):
+        return None
+    cleaned = re.sub(r"\s+", " ", source_channel).strip()
+    if not cleaned:
+        return None
+    lower = cleaned.lower()
+    for prefix in ("credit:", "quelle:", "via "):
+        if lower.startswith(prefix):
+            cleaned = cleaned[len(prefix) :].strip()
+            break
+    return cleaned[:60].strip() or None
+
+
+def append_source_credit(caption: str, source_channel: Optional[str]) -> str:
+    """Append ``Credit: <Channel>`` to a social caption if not already mentioned."""
+    channel = _normalize_credit_channel(source_channel)
+    body = (caption or "").strip()
+    if not channel:
+        return body
+    if channel.lower() in body.lower():
+        return body
+    credit_line = f"Credit: {channel}"
+    if not body:
+        return credit_line
+    combined = f"{body}\n\n{credit_line}"
+    if len(combined) <= 2000:
+        return combined
+    trimmed = body[: max(0, 2000 - len(credit_line) - 2)].rstrip()
+    return f"{trimmed}\n\n{credit_line}"
+
+
+def _with_channel_hashtag(hashtags: List[str], source_channel: Optional[str], limit: int = 7) -> List[str]:
+    channel = _normalize_credit_channel(source_channel)
+    if not channel:
+        return hashtags
+    ch_tag = _clean_tag(re.sub(r"\s+", "", channel))
+    if not ch_tag:
+        return hashtags
+    existing_lower = {t.lower() for t in hashtags}
+    if ch_tag.lower() in existing_lower:
+        return hashtags
+    merged = [ch_tag, *hashtags]
+    return merged[:limit]
+
+
+def fallback_social_post_metadata(
+    clip: Dict[str, Any],
+    *,
+    source_channel: Optional[str] = None,
+) -> Dict[str, Any]:
     """Deterministic title + caption + hashtags fallback when the LLM is unavailable."""
     raw_title = str(clip.get("hook_title") or "").strip()
     raw_text = re.sub(r"\s+", " ", str(clip.get("text") or "").strip())
@@ -132,10 +182,13 @@ def fallback_social_post_metadata(clip: Dict[str, Any]) -> Dict[str, Any]:
     else:
         caption = title
 
+    caption = append_source_credit(caption, source_channel)
+    hashtags = _with_channel_hashtag(_extract_keyword_hashtags(clip, limit=5), source_channel, limit=6)
+
     return {
         "title": title[:100],
         "caption": caption[:2000],
-        "hashtags": _extract_keyword_hashtags(clip, limit=5),
+        "hashtags": hashtags,
     }
 
 
@@ -213,7 +266,13 @@ def _parse_metadata_output(raw_output: str, clip: Dict[str, Any]) -> Dict[str, A
     }
 
 
-async def generate_social_caption(api_key: str, clip: dict, provider: str) -> str:
+async def generate_social_caption(
+    api_key: str,
+    clip: dict,
+    provider: str,
+    *,
+    source_channel: Optional[str] = None,
+) -> str:
     model = _select_caption_model(api_key)
     agent = Agent(
         model, output_type=str, system_prompt=CAPTION_PROMPT,
@@ -228,7 +287,7 @@ async def generate_social_caption(api_key: str, clip: dict, provider: str) -> st
     caption = result.output.strip()
     if not caption or len(caption) > 2200:
         raise ValueError("Invalid generated caption")
-    return caption
+    return append_source_credit(caption, source_channel)
 
 
 async def generate_social_post_metadata(
@@ -238,6 +297,7 @@ async def generate_social_post_metadata(
     *,
     allow_fallback: bool = True,
     timeout: float = 30.0,
+    source_channel: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Generate title + caption + hashtags for a clip, falling back cleanly if needed."""
     transcript = str(clip.get("text") or "").strip()
@@ -249,7 +309,7 @@ async def generate_social_post_metadata(
 
     if not transcript and not headline:
         if allow_fallback:
-            return fallback_social_post_metadata(clip)
+            return fallback_social_post_metadata(clip, source_channel=source_channel)
         raise ValueError("Clip has no transcript or headline")
 
     try:
@@ -270,8 +330,11 @@ async def generate_social_post_metadata(
         meta = _parse_metadata_output(result.output, clip)
         if planned_caption:
             meta["caption"] = planned_caption[:2000]
+        if source_channel:
+            meta["caption"] = append_source_credit(meta["caption"], source_channel)
+            meta["hashtags"] = _with_channel_hashtag(meta["hashtags"], source_channel, limit=7)
         return meta
     except Exception:
         if allow_fallback:
-            return fallback_social_post_metadata(clip)
+            return fallback_social_post_metadata(clip, source_channel=source_channel)
         raise

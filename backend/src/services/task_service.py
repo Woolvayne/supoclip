@@ -602,9 +602,9 @@ class TaskService(ClipEditingMixin):
             # Reduced-resolution plans download at their output quality and get
             # a final downscale; 1080p plans keep the renderer's output.
             download_quality, output_short_side = reduced_media_limits(billing)
-            source_range = SourceRange.from_metadata(
-                await self.task_repo.load_source_metadata(self.db, task_id)
-            )
+            raw_source_metadata = await self.task_repo.load_source_metadata(self.db, task_id)
+            task_source_metadata = dict(raw_source_metadata) if isinstance(raw_source_metadata, dict) else {}
+            source_range = SourceRange.from_metadata(task_source_metadata)
             cache_key = self._build_cache_key(
                 url, source_type, processing_mode, download_quality, source_range
             )
@@ -864,6 +864,28 @@ class TaskService(ClipEditingMixin):
             clip_previews: list[tuple[int, int, ClipPreview]] = []
             noun = OUTPUT_NOUNS.get(spec.workflow, "clip")
             rendered_meta: list[tuple[Dict[str, Any], list]] = []
+            from ..media.captions import resolve_task_watermark_text
+
+            discovered_channel = (
+                result.get("source_channel") if isinstance(result, dict) else None
+            )
+            if (
+                isinstance(discovered_channel, str)
+                and discovered_channel.strip()
+                and not task_source_metadata.get("source_channel")
+            ):
+                task_source_metadata["source_channel"] = discovered_channel.strip()
+                try:
+                    async with self._processing_transaction(task_id):
+                        await self.task_repo.save_source_metadata(
+                            self.db, task_id, task_source_metadata
+                        )
+                except Exception:
+                    logger.debug("Could not backfill source_channel on task %s", task_id, exc_info=True)
+            watermark_text = resolve_task_watermark_text(
+                task_source_metadata,
+                fallback_channel=discovered_channel if isinstance(discovered_channel, str) else None,
+            )
 
             for i, segment in enumerate(segments_to_render):
                 # Check cancellation
@@ -883,6 +905,8 @@ class TaskService(ClipEditingMixin):
                 # A partial download is a concatenated timeline. Render against
                 # local timestamps, then store the clip against the source.
                 render_segment = localize_segment(segment, time_map) if time_map else segment
+                if watermark_text:
+                    render_segment = {**render_segment, "watermark_text": watermark_text}
                 # A planned output carries its own cap (a 90s recap is not cut at 60s).
                 max_clip_seconds = (
                     float(segment["max_seconds"])

@@ -529,5 +529,9 @@
       "title": "这个视频超过了你 {minutes} 分钟的上限",
       "body": "它比你的方案允许的更长，并且这里无法选择其中一段。请使用完整录像或更短的视频。未消耗分钟数。"
     }
-  }
+  },
+  "sourceWatermark": "来源频道水印 (Credit)",
+  "sourceWatermarkHint": "自动在视频左上角添加“Credit: 频道名称”水印，并在社交文案中附上来源署名。",
+  "sourceChannelLabel": "自定义频道名称（可选）",
+  "sourceChannelPlaceholder": "自动识别来源频道"
 }

@@ -546,6 +546,19 @@ class SocialService:
     # ------------------------------------------------------------------
     # Posts
     # ------------------------------------------------------------------
+    async def _task_credit_channel(self, task_id: str) -> Optional[str]:
+        load_fn = getattr(self.task_repo, "load_source_metadata", None)
+        if not callable(load_fn):
+            return None
+        try:
+            meta = await load_fn(self.db, task_id)
+        except Exception:
+            return None
+        if not isinstance(meta, dict) or meta.get("source_watermark") is False:
+            return None
+        raw = meta.get("watermark_text") or meta.get("source_channel")
+        return raw.strip() if isinstance(raw, str) and raw.strip() else None
+
     async def generate_caption(
         self,
         user_id: str,
@@ -588,6 +601,8 @@ class SocialService:
             )
         if not self.config.anthropic_api_key and not can_use_self_host_llm:
             raise SocialProviderUnavailable("Caption generation requires ANTHROPIC_API_KEY on the server.")
+        source_channel = await self._task_credit_channel(task_id)
+        channel_kwargs = {"source_channel": source_channel} if source_channel else {}
         try:
             if include_hashtags:
                 meta = await generate_social_post_metadata(
@@ -595,6 +610,7 @@ class SocialService:
                     clip,
                     provider,
                     allow_fallback=False,
+                    **channel_kwargs,
                 )
                 return {
                     "caption": meta["caption"],
@@ -602,7 +618,10 @@ class SocialService:
                     "title": meta["title"],
                 }
             caption = await generate_social_caption(
-                self.config.anthropic_api_key or "", clip, provider
+                self.config.anthropic_api_key or "",
+                clip,
+                provider,
+                **channel_kwargs,
             )
         except Exception as exc:
             logger.warning("Social caption generation failed (%s)", type(exc).__name__)
@@ -752,17 +771,20 @@ class SocialService:
             can_use_llm = _get_missing_llm_key_error(self.config.llm, self.config) is None
 
         primary_provider = active_accounts[0][0]["provider"]
+        source_channel = await self._task_credit_channel(task_id)
+        channel_kwargs = {"source_channel": source_channel} if source_channel else {}
         semaphore = asyncio.Semaphore(2)
 
         async def _draft_for_clip(clip: Dict[str, Any]) -> Dict[str, Any]:
             if not can_use_llm:
-                return fallback_social_post_metadata(clip)
+                return fallback_social_post_metadata(clip, **channel_kwargs)
             async with semaphore:
                 return await generate_social_post_metadata(
                     self.config.anthropic_api_key or "",
                     clip,
                     primary_provider,
                     allow_fallback=True,
+                    **channel_kwargs,
                 )
 
         drafts = await asyncio.gather(*(_draft_for_clip(clip) for clip, _ in clip_plan))

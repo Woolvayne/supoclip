@@ -529,5 +529,9 @@
       "title": "This video is over your {minutes}-minute limit",
       "body": "It's longer than your plan allows, and part of it can't be picked here. Try the finished recording or a shorter video. No minutes were used."
     }
-  }
+  },
+  "sourceWatermark": "Source channel credit",
+  "sourceWatermarkHint": "Automatically burns \"Credit: ChannelName\" into the top-left safe zone and appends creator credit to social captions.",
+  "sourceChannelLabel": "Custom channel name (optional)",
+  "sourceChannelPlaceholder": "Auto-detect from source channel"
 }

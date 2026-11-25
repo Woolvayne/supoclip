@@ -198,6 +198,38 @@ def detect_stream_source(url: str) -> tuple[str, str, str]:
     raise ValueError(UNSUPPORTED_SOURCE_MESSAGE)
 
 
+def stream_channel_from_url(url: str) -> Optional[str]:
+    """Extract the Twitch or Kick channel handle from a URL path when present."""
+    try:
+        parsed = urlparse(str(url).strip())
+    except (TypeError, ValueError):
+        return None
+    host = (parsed.hostname or "").lower().removeprefix("www.")
+    parts = [segment for segment in (parsed.path or "").split("/") if segment]
+    if not parts:
+        return None
+    if host in _TWITCH_HOSTS and len(parts) >= 3 and parts[1].lower() == "clip":
+        return parts[0]
+    if host == "kick.com":
+        first = parts[0]
+        if first.lower() not in {"video", "videos", "categories", "browse", "search"}:
+            if len(parts) >= 3 and parts[1].lower() in {"videos", "clips"}:
+                return first
+            if len(parts) == 1 and parse_qs(parsed.query).get("clip"):
+                return first
+    return None
+
+
+def _extract_stream_uploader(info: dict, url: str) -> Optional[str]:
+    for key in ("uploader", "channel", "creator", "channel_name", "broadcaster_name", "author"):
+        raw = info.get(key)
+        if isinstance(raw, dict):
+            raw = raw.get("username") or raw.get("slug") or raw.get("display_name") or raw.get("name")
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    return stream_channel_from_url(url)
+
+
 def _provider_order(source: str, config=None) -> list[str]:
     config = config or get_config()
     providers = [
@@ -1034,7 +1066,10 @@ def _apify_info(url: str, provider: str, expected_duration: Optional[float] = No
         raise RuntimeError("actor result duration does not match requested video")
     if provider == "apify_kick_mp4" and not duration:
         raise RuntimeError("full-video actor returned no duration to verify")
-    return {"id": source_id, "title": item.get("title"), "duration": duration, "media_url": item[media_key], "provider": provider}
+    result = {"id": source_id, "title": item.get("title"), "duration": duration, "media_url": item[media_key], "provider": provider}
+    if uploader := _extract_stream_uploader(item, url):
+        result["uploader"] = uploader
+    return result
 
 
 def _stream_download(response, destination: Path, max_bytes: int, budget=None) -> None:
@@ -1217,6 +1252,8 @@ def fetch_stream_info(url: str, *, deadline_seconds: float = PREFLIGHT_DEADLINE_
             if not duration or duration <= 0:
                 raise _NoDuration("provider returned no duration")
             result = {"id": source_id, "title": info.get("title"), "duration": duration, "provider": provider}
+            if uploader := _extract_stream_uploader(info, url):
+                result["uploader"] = uploader
             if provider in APIFY_PROVIDERS:
                 result["media_url"] = info["media_url"]
             _log_stream(logging.INFO, "metadata_ok", provider=provider, source=source, kind=kind, host=host)

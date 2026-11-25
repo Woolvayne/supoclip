@@ -306,5 +306,7 @@
     "approxTiming": "Este vídeo não tinha tempo por palavra, então legendas e efeitos seguem um tempo aproximado.",
     "simplified": "Alguns efeitos foram simplificados neste clipe."
   },
-  "sourceRange": "Parte {start}–{end}"
+  "sourceRange": "Parte {start}–{end}",
+  "sourceCreditBadge": "Credit: {channel}",
+  "sourceCreditTooltip": "Marca d'água \"Credit: {channel}\" ativa nos clipes e legendas sociais"
 }

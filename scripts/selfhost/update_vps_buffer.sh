@@ -130,10 +130,6 @@ SKIP_FRONTEND_BUILD=0
 if [[ "${FORCE_FRONTEND_BUILD:-0}" != "1" && -f "${EXISTING_STANDALONE}/server.js" && -d "${APP_DIR}/frontend/.next/static" ]]; then
   if [[ -f "${APP_DIR}/frontend/.next/.supoclip_frontend_hash" ]] && [[ "$(cat "${APP_DIR}/frontend/.next/.supoclip_frontend_hash" 2>/dev/null || true)" == "${FRONTEND_HASH}" ]]; then
     SKIP_FRONTEND_BUILD=1
-  elif grep -rq "autoPostAll" "${APP_DIR}/frontend/.next" 2>/dev/null; then
-    # Already built with current Auto-Post UI; stamp hash and skip redundant rebuild
-    echo "${FRONTEND_HASH}" > "${APP_DIR}/frontend/.next/.supoclip_frontend_hash"
-    SKIP_FRONTEND_BUILD=1
   fi
 fi
 

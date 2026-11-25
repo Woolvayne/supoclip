@@ -1,5 +1,6 @@
 """Captions helpers for the video pipeline."""
 
+import re
 import unicodedata
 from typing import Any
 from typing import Callable
@@ -568,6 +569,114 @@ def build_hook_title_ass(
     return style_line, events
 
 
+SOURCE_WATERMARK_MAX_CHANNEL_CHARS = 40
+
+
+def format_source_watermark_text(channel_name: Optional[str]) -> Optional[str]:
+    """Return a clean creator-attribution label such as ``Credit: ChannelName``."""
+    if not isinstance(channel_name, str):
+        return None
+    cleaned = re.sub(r"[\r\n\t]+", " ", channel_name)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if not cleaned:
+        return None
+    lower = cleaned.lower()
+    has_prefix = lower.startswith(("credit:", "quelle:", "via "))
+    if has_prefix:
+        prefix, _, rest = cleaned.partition(":")
+        if not rest:
+            prefix, _, rest = cleaned.partition(" ")
+            sep = " "
+        else:
+            sep = ": "
+        rest = rest.strip()
+        if not rest:
+            return None
+        if len(rest) > SOURCE_WATERMARK_MAX_CHANNEL_CHARS:
+            rest = rest[: SOURCE_WATERMARK_MAX_CHANNEL_CHARS - 1].rstrip() + "…"
+        return f"{prefix.strip()}{sep}{rest}"
+    if len(cleaned) > SOURCE_WATERMARK_MAX_CHANNEL_CHARS:
+        cleaned = cleaned[: SOURCE_WATERMARK_MAX_CHANNEL_CHARS - 1].rstrip() + "…"
+    return f"Credit: {cleaned}"
+
+
+def resolve_task_watermark_text(
+    metadata: Optional[Dict[str, Any]],
+    *,
+    fallback_channel: Optional[str] = None,
+) -> Optional[str]:
+    """Resolve the effective watermark text for a task from its source metadata."""
+    meta = metadata or {}
+    if meta.get("source_watermark") is False:
+        return None
+    candidate = meta.get("watermark_text") or meta.get("source_channel") or fallback_channel
+    return format_source_watermark_text(candidate)
+
+
+def build_source_watermark_ass(
+    watermark_text: str,
+    video_width: int,
+    video_height: int,
+    output_duration: float,
+    fallback_font_family: Optional[str] = None,
+    time_map: Optional[TimeMap] = None,
+) -> Tuple[str, List[str]]:
+    """Build a subtle, non-intrusive creator-credit watermark badge in the top-left safe zone."""
+    label = format_source_watermark_text(watermark_text)
+    if not label:
+        return "", []
+
+    custom_font_path = (
+        find_font_path(fallback_font_family, allow_all_user_fonts=True)
+        if fallback_font_family
+        else None
+    )
+    if (
+        custom_font_path
+        and FONTS_DIR.exists()
+        and Path(custom_font_path).parent != FONTS_DIR
+    ):
+        wm_font = ass_font_name(fallback_font_family)
+    else:
+        wm_family, _ = ensure_glyph_coverage("Inter", {}, [label])
+        wm_font = ass_font_name(wm_family)
+
+    short_side = max(240, min(video_width, video_height))
+    wm_px = max(18, min(34, int(round(short_side * 0.026))))
+    bord_px = max(6, round(wm_px * 0.25))
+    margin_x = max(28, int(video_width * 0.045))
+    margin_v = (
+        max(36, int(video_height * 0.065))
+        if video_height > video_width
+        else max(24, int(video_height * 0.05))
+    )
+
+    style_line = (
+        f"Style: Watermark,{wm_font},{wm_px},&H14FFFFFF,&H000000FF,&H66000000,&H66000000,"
+        f"1,0,0,0,100,100,0,0,3,{bord_px},0,7,{margin_x},{margin_x},{margin_v},1"
+    )
+
+    if label.startswith("Credit: "):
+        channel_part = escape_ass_text(label[len("Credit: ") :])
+        styled_text = f"{{\\c&H2AD4D4D8&\\b0}}Credit: {{\\c&H08FFFFFF&\\b1}}{channel_part}"
+    else:
+        styled_text = f"{{\\c&H08FFFFFF&\\b1}}{escape_ass_text(label)}"
+
+    end_sec = max(0.5, float(output_duration))
+    if time_map is not None:
+        end_sec = max(0.5, float(time_map(end_sec)))
+    fade_ms = min(180, max(0, int(end_sec * 250)))
+    entrance = f"\\fad({fade_ms},0)" if fade_ms > 0 else ""
+
+    event = (
+        f"Dialogue: 2,{ass_timestamp(0.0)},{ass_timestamp(end_sec)},Watermark,,0,0,0,,"
+        f"{{{entrance}}}{styled_text}"
+        if entrance
+        else f"Dialogue: 2,{ass_timestamp(0.0)},{ass_timestamp(end_sec)},Watermark,,0,0,0,,{styled_text}"
+    )
+    return style_line, [event]
+
+
 # A planned clip that jumps this far in the source (or backwards) starts a
 # new passage: a recap point, a trailer beat, the far side of a skipped tangent.
 PASSAGE_JUMP_SECONDS = 2.0
@@ -649,6 +758,7 @@ def build_assemblyai_ass_subtitles(
     time_map: Optional[TimeMap] = None,
     censor_spans: Optional[Sequence[Tuple[float, float]]] = None,
     drop_screen_words: bool = False,
+    watermark_text: Optional[str] = None,
 ) -> bool:
     """Generate animated word-synced ASS subtitles from cached AssemblyAI words.
 
@@ -711,7 +821,8 @@ def build_assemblyai_ass_subtitles(
             # A caption line holds each word until the next one starts. Across a line that was left out that
             # is many seconds of the same words, so a line ends where words were left out.
             passage_breaks = sorted({*passage_breaks, *_pause_breaks(relevant_words)})
-    if not relevant_words and not hook_title and not point_labels:
+    normalized_watermark = format_source_watermark_text(watermark_text)
+    if not relevant_words and not hook_title and not point_labels and not normalized_watermark:
         logger.warning("No words or hook title available for ASS subtitles")
         return False
     if censor_spans:
@@ -720,7 +831,7 @@ def build_assemblyai_ass_subtitles(
     effective_font_family, template = ensure_glyph_coverage(
         effective_font_family,
         template,
-        [hook_title or ""]
+        [hook_title or "", normalized_watermark or ""]
         + [str(label.get("text", "")) for label in point_labels or []]
         + [str(word.get("text", "")) for word in relevant_words],
     )
@@ -829,6 +940,18 @@ def build_assemblyai_ass_subtitles(
         )
         hook_style_block += f"{point_style_line}\n"
         hook_events = hook_events + point_events
+    if normalized_watermark:
+        wm_style_line, wm_events = build_source_watermark_ass(
+            normalized_watermark,
+            video_width,
+            video_height,
+            output_duration,
+            fallback_font_family=effective_font_family,
+            time_map=time_map,
+        )
+        if wm_style_line:
+            hook_style_block += f"{wm_style_line}\n"
+            hook_events = hook_events + wm_events
 
     # Contextual emoji + emphasis annotations over the whole clip word list.
     emoji_by_idx, emphasis_idx = annotate_caption_words(

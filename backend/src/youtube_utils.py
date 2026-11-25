@@ -362,7 +362,12 @@ def _fetch_video_info_with_ytdlp(
         "title": info.get("title"),
         "description": info.get("description", ""),
         "duration": info.get("duration"),
-        "uploader": info.get("uploader"),
+        "uploader": (
+            info.get("uploader")
+            or info.get("channel")
+            or info.get("creator")
+            or info.get("uploader_id")
+        ),
         "upload_date": info.get("upload_date"),
         "view_count": info.get("view_count"),
         "like_count": info.get("like_count"),

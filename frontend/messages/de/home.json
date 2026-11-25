@@ -529,5 +529,9 @@
       "title": "Dieses Video ist länger als dein Limit von {minutes} Minuten",
       "body": "Es ist länger, als dein Tarif erlaubt, und hier lässt sich kein Teil davon wählen. Nimm die fertige Aufzeichnung oder ein kürzeres Video. Es wurden keine Minuten verbraucht."
     }
-  }
+  },
+  "sourceWatermark": "Kanal-Wasserzeichen (Credit)",
+  "sourceWatermarkHint": "Brennt automatisch „Credit: Kanalname“ oben links ins Video ein und ergänzt den Credit in Social-Captions.",
+  "sourceChannelLabel": "Eigener Kanalname (optional)",
+  "sourceChannelPlaceholder": "Automatisch vom Kanal erkennen"
 }

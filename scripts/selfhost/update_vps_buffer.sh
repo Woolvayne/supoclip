@@ -16,7 +16,7 @@ export PATH="/usr/local/bin:/opt/ffmpeg8/bin:${PNPM_HOME}:/pnpm:/root/.local/bin
 
 APP_DIR="${APP_DIR:-/opt/supoclip}"
 REPO_URL="${REPO_URL:-https://github.com/Woolvayne/supoclip.git}"
-REPO_BRANCH="${REPO_BRANCH:-arena/1292b1b9-supoclip}"
+REPO_BRANCH="${REPO_BRANCH:-auto}"
 MAX_CORES="${SUPOCLIP_MAX_CPU_CORES:-2}"
 
 if [[ ! -d "${APP_DIR}" ]]; then
@@ -60,7 +60,7 @@ if ! /usr/local/bin/ffmpeg -version 2>/dev/null | grep -qE "version (n?[6789]|8\
 fi
 echo "    [OK] $(/usr/local/bin/ffmpeg -version | head -n 1)"
 
-echo "==> [2/6] Synchronisiere ${APP_DIR} mit ${REPO_URL} (${REPO_BRANCH})..."
+echo "==> [2/6] Synchronisiere ${APP_DIR} mit neuestem GitHub-Stand (${REPO_URL})..."
 git config --global --add safe.directory "${APP_DIR}" >/dev/null 2>&1 || true
 cd "${APP_DIR}"
 if git remote get-url origin >/dev/null 2>&1; then
@@ -68,9 +68,25 @@ if git remote get-url origin >/dev/null 2>&1; then
 else
   git remote add origin "${REPO_URL}"
 fi
-git fetch --depth 1 origin "${REPO_BRANCH}"
-git checkout -B "${REPO_BRANCH}" FETCH_HEAD
-git reset --hard FETCH_HEAD
+
+if [[ "${REPO_BRANCH}" == "auto" ]]; then
+  git fetch --prune --depth 5 origin \
+    "+refs/heads/main:refs/remotes/origin/main" \
+    "+refs/heads/arena/*:refs/remotes/origin/arena/*"
+  TARGET_REF="$(git for-each-ref --sort=-committerdate --format='%(refname:short)' refs/remotes/origin/main refs/remotes/origin/arena/ | head -n 1)"
+  if [[ -z "${TARGET_REF}" ]]; then
+    TARGET_REF="origin/main"
+  fi
+  LOCAL_BRANCH="${TARGET_REF#origin/}"
+  git checkout -B "${LOCAL_BRANCH}" "${TARGET_REF}"
+  git reset --hard "${TARGET_REF}"
+else
+  git fetch --depth 1 origin "${REPO_BRANCH}"
+  git checkout -B "${REPO_BRANCH}" FETCH_HEAD
+  git reset --hard FETCH_HEAD
+  LOCAL_BRANCH="${REPO_BRANCH}"
+fi
+echo "    [OK] Aktiv: ${LOCAL_BRANCH} @ $(git log -1 --format='%h — %s')"
 
 if [[ ! -f "${SECRETS_FILE}" && -f "${SECRETS_BACKUP}" ]]; then
   cp -fp "${SECRETS_BACKUP}" "${SECRETS_FILE}"
@@ -106,6 +122,14 @@ ASYNC_DB_URL="postgresql+asyncpg://supoclip:${PG_PASS:-supoclip}@127.0.0.1:5432/
 SYNC_DB_URL="postgresql://supoclip:${PG_PASS:-supoclip}@127.0.0.1:5432/supoclip"
 
 if [[ -x "${APP_DIR}/backend/.venv/bin/python" ]]; then
+  # Refresh yt-dlp once every 24h so YouTube/Twitch/Kick extractors stay current
+  YTDLP_STAMP="${APP_DIR}/backend/.venv/.ytdlp_updated_at"
+  NOW_TS="$(date +%s)"
+  LAST_YTDLP_TS="$(cat "${YTDLP_STAMP}" 2>/dev/null || echo 0)"
+  if (( NOW_TS - LAST_YTDLP_TS > 86400 )); then
+    timeout 45 "${APP_DIR}/backend/.venv/bin/pip" install -q -U yt-dlp >/dev/null 2>&1 && echo "${NOW_TS}" > "${YTDLP_STAMP}" || true
+  fi
+
   (
     cd "${APP_DIR}/backend"
     DATABASE_URL="${ASYNC_DB_URL}" SELF_HOST=true "${APP_DIR}/backend/.venv/bin/python" -c "
@@ -120,7 +144,7 @@ fi
 echo "==> [4/6] Pruefe Next.js Standalone-Frontend (inkl. Auto-Post & Buffer-UI)..."
 cd "${APP_DIR}/frontend"
 
-FRONTEND_HASH="$(find "${APP_DIR}/frontend/src" "${APP_DIR}/frontend/messages" "${APP_DIR}/frontend/package.json" -type f -exec sha256sum {} + | sort | sha256sum | awk '{print $1}')"
+FRONTEND_HASH="$(find "${APP_DIR}/frontend/src" "${APP_DIR}/frontend/messages" "${APP_DIR}/frontend/package.json" -not -path "*/src/generated/*" -type f -exec sha256sum {} + | sort | sha256sum | awk '{print $1}')"
 EXISTING_STANDALONE="${APP_DIR}/frontend/.next/standalone"
 if [[ -f "${EXISTING_STANDALONE}/frontend/server.js" ]]; then
   EXISTING_STANDALONE="${EXISTING_STANDALONE}/frontend"
@@ -154,19 +178,27 @@ else
   fi
 
   # Keep a backup of any pre-existing Prisma native query engine before regenerating
-  rm -rf /tmp/supoclip_prisma_bak
-  if [[ -d "${APP_DIR}/frontend/src/generated/prisma" ]]; then
-    cp -rf "${APP_DIR}/frontend/src/generated/prisma" /tmp/supoclip_prisma_bak
-  fi
+  LOCK_HASH="$(sha256sum "${APP_DIR}/frontend/package.json" "${APP_DIR}/frontend/pnpm-lock.yaml" "${APP_DIR}/frontend/prisma/schema.prisma" 2>/dev/null | sha256sum | awk '{print $1}')"
+  PREV_LOCK_HASH="$(cat "${APP_DIR}/frontend/node_modules/.supoclip_lock_hash" 2>/dev/null || true)"
 
-  "${PNPM_BIN[@]}" install --frozen-lockfile --ignore-scripts || "${PNPM_BIN[@]}" install --ignore-scripts
-  DATABASE_URL="${SYNC_DB_URL}" "${PNPM_BIN[@]}" exec prisma generate || {
-    if [[ -d /tmp/supoclip_prisma_bak ]]; then
-      mkdir -p "${APP_DIR}/frontend/src/generated"
-      cp -rf /tmp/supoclip_prisma_bak "${APP_DIR}/frontend/src/generated/prisma"
+  if [[ "${FORCE_FRONTEND_BUILD:-0}" != "1" && "${LOCK_HASH}" == "${PREV_LOCK_HASH}" && -d "${APP_DIR}/frontend/node_modules/next" && -d "${APP_DIR}/frontend/src/generated/prisma" ]]; then
+    echo "    [FAST] node_modules & Prisma-Client unveraendert – ueberspringe pnpm install."
+  else
+    rm -rf /tmp/supoclip_prisma_bak
+    if [[ -d "${APP_DIR}/frontend/src/generated/prisma" ]]; then
+      cp -rf "${APP_DIR}/frontend/src/generated/prisma" /tmp/supoclip_prisma_bak
     fi
-  }
-  rm -rf /tmp/supoclip_prisma_bak
+
+    "${PNPM_BIN[@]}" install --frozen-lockfile --ignore-scripts || "${PNPM_BIN[@]}" install --ignore-scripts
+    DATABASE_URL="${SYNC_DB_URL}" "${PNPM_BIN[@]}" exec prisma generate || {
+      if [[ -d /tmp/supoclip_prisma_bak ]]; then
+        mkdir -p "${APP_DIR}/frontend/src/generated"
+        cp -rf /tmp/supoclip_prisma_bak "${APP_DIR}/frontend/src/generated/prisma"
+      fi
+    }
+    rm -rf /tmp/supoclip_prisma_bak
+    echo "${LOCK_HASH}" > "${APP_DIR}/frontend/node_modules/.supoclip_lock_hash"
+  fi
 
   cp -f "${APP_DIR}/CHANGELOG.md" "${APP_DIR}/LICENSE" "${APP_DIR}/frontend/" 2>/dev/null || true
 

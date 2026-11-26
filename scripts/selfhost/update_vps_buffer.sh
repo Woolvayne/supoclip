@@ -15,7 +15,7 @@ set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 export PNPM_HOME="${PNPM_HOME:-/root/.local/share/pnpm}"
-export PATH="/usr/local/bin:/opt/ffmpeg8/bin:${PNPM_HOME}:/pnpm:/root/.local/bin:/root/.deno/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+export PATH="/usr/local/bin:/opt/ffmpeg8/bin:${PNPM_HOME}:/pnpm:/root/.local/bin:/root/.cargo/bin:/root/.deno/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 
 APP_DIR="${APP_DIR:-/opt/supoclip}"
 REPO_URL="${REPO_URL:-https://github.com/Woolvayne/supoclip.git}"
@@ -23,6 +23,7 @@ REPO_BRANCH="${REPO_BRANCH:-auto}"
 MAX_CORES="${SUPOCLIP_MAX_CPU_CORES:-2}"
 FORCE_REBUILD="${FORCE_REBUILD:-0}"
 FORCE_FRONTEND_BUILD="${FORCE_FRONTEND_BUILD:-${FORCE_REBUILD}}"
+SUPOCLIP_EXTERNAL_SUPERVISOR="${SUPOCLIP_EXTERNAL_SUPERVISOR:-0}"
 
 mkdir -p "${APP_DIR}" /var/lib/supoclip/uploads /var/lib/supoclip/clips /var/log/supoclip
 
@@ -258,8 +259,24 @@ SYNC_DB_URL="postgresql://supoclip:${PG_PASS}@127.0.0.1:5432/supoclip"
 # [Bereich E] Backend Python .venv & Pakete pruefen (NUR reparieren wenn noetig)
 # -----------------------------------------------------------------------------
 echo "==> [E/G] Pruefe Backend Python-Umgebung (.venv)..."
+
+venv_install_pkgs() {
+  local py_bin="${APP_DIR}/backend/.venv/bin/python"
+  if command -v uv >/dev/null 2>&1; then
+    uv pip install --python "${py_bin}" -q "$@"
+    return $?
+  fi
+  if ! "${py_bin}" -m pip --version >/dev/null 2>&1; then
+    "${py_bin}" -m ensurepip --upgrade >/dev/null 2>&1 || {
+      apt-get update -qq && apt-get install -y -qq python3-venv python3-pip >/dev/null 2>&1 || true
+      curl -fsSL https://bootstrap.pypa.io/get-pip.py | "${py_bin}" >/dev/null 2>&1 || true
+    }
+  fi
+  "${py_bin}" -m pip install -q "$@"
+}
+
 VENV_OK=0
-if [[ "${FORCE_REBUILD}" != "1" && -x "${APP_DIR}/backend/.venv/bin/python" && -x "${APP_DIR}/backend/.venv/bin/uvicorn" && -x "${APP_DIR}/backend/.venv/bin/arq" ]]; then
+if [[ -x "${APP_DIR}/backend/.venv/bin/python" && -x "${APP_DIR}/backend/.venv/bin/uvicorn" && -x "${APP_DIR}/backend/.venv/bin/arq" ]]; then
   if "${APP_DIR}/backend/.venv/bin/python" -c "import fastapi, uvicorn, sqlalchemy, asyncpg, arq, redis, yt_dlp, pydantic_ai, cryptography, apify_client, cv2, numpy, assemblyai, srt" >/dev/null 2>&1; then
     VENV_OK=1
   fi
@@ -271,14 +288,26 @@ if [[ "${VENV_OK}" == "1" ]]; then
   NOW_TS="$(date +%s)"
   LAST_YTDLP_TS="$(cat "${YTDLP_STAMP}" 2>/dev/null || echo 0)"
   if (( NOW_TS - LAST_YTDLP_TS > 86400 )); then
-    timeout 45 "${APP_DIR}/backend/.venv/bin/pip" install -q -U yt-dlp >/dev/null 2>&1 && echo "${NOW_TS}" > "${YTDLP_STAMP}" || true
+    timeout 45 bash -c '
+      if command -v uv >/dev/null 2>&1; then
+        uv pip install --python "'"${APP_DIR}"'/backend/.venv/bin/python" -q -U yt-dlp
+      elif "'"${APP_DIR}"'/backend/.venv/bin/python" -m pip --version >/dev/null 2>&1; then
+        "'"${APP_DIR}"'/backend/.venv/bin/python" -m pip install -q -U yt-dlp
+      fi
+    ' >/dev/null 2>&1 && echo "${NOW_TS}" > "${YTDLP_STAMP}" || true
   fi
 else
   echo "    [REPAIR] Erstelle/repariere Python .venv & fehlende Backend-Pakete..."
   cd "${APP_DIR}/backend"
-  [[ -x .venv/bin/python ]] || python3 -m venv .venv
-  .venv/bin/pip install -q --upgrade pip wheel setuptools
-  .venv/bin/pip install -q \
+  if [[ ! -x .venv/bin/python ]]; then
+    if command -v uv >/dev/null 2>&1; then
+      uv venv .venv --seed
+    else
+      python3 -m venv .venv
+    fi
+  fi
+  venv_install_pkgs --upgrade pip wheel setuptools || true
+  venv_install_pkgs \
     fastapi "uvicorn>=0.27.0" "pydantic-ai>=1.107.7,<2" asyncpg "sqlalchemy>=2.0.25" \
     alembic python-dotenv "yt-dlp[default]" "bgutil-ytdlp-pot-provider==2.0.2" \
     openai-whisper greenlet opencv-python-headless srt-equalizer assemblyai srt \
@@ -427,7 +456,10 @@ SUPERVISOR_HEADER
 
 cat << 'SUPERVISOR' >> /opt/supoclip/run_supervisor.sh
 
-export PATH="/usr/local/bin:/opt/ffmpeg8/bin:/root/.local/bin:/root/.deno/bin:/usr/bin:/bin:$PATH"
+mkdir -p /var/log/supoclip
+exec </dev/null >>/var/log/supoclip/supervisor.log 2>&1
+
+export PATH="/usr/local/bin:/opt/ffmpeg8/bin:/root/.local/bin:/root/.cargo/bin:/root/.deno/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 if [ -f /opt/supoclip/.secrets.env ]; then
   # shellcheck disable=SC1091
   source /opt/supoclip/.secrets.env
@@ -573,7 +605,12 @@ pkill -f "uvicorn src.main:app" >/dev/null 2>&1 || true
 pkill -f "server-request-timeout.cjs" >/dev/null 2>&1 || true
 sleep 1
 
-nohup /opt/supoclip/run_supervisor.sh >>/var/log/supoclip/supervisor.log 2>&1 </dev/null &
+if [[ "${SUPOCLIP_EXTERNAL_SUPERVISOR}" == "1" ]]; then
+  echo "    [OK] Supervisor-Skript bereit fuer persistenten Windows-WSL-Start."
+  exit 0
+fi
+
+setsid /opt/supoclip/run_supervisor.sh >>/var/log/supoclip/supervisor.log 2>&1 </dev/null &
 
 BACKEND_OK=0
 FRONTEND_OK=0

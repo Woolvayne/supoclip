@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 from .caption_style import LOOKS, _hex6, look_accent
-from .contracts import FxCaptionStyle, FxHookTitle, LISTED_FX_CAPTION_TEMPLATES, caption_look_for
+from .contracts import FxCaptionStyle, FxHookTitle, LOOK_TEMPLATES, caption_look_for
 
 # The card's type for the listed animated styles, whatever the intensity (their caption fonts are the looks' own).
 HOOK_FONT = "Poppins-ExtraBold"
@@ -40,9 +40,10 @@ def hook_look(template_id: str | None, intensity: str | None, sensitivity: str =
 
 
 def hook_font(template_id: str | None, font: str | None) -> str:
-    """The listed styles' card is Poppins ExtraBold unless the user picked a font of their own (a look's own caption
-    font is not a choice); other templates use their caption font (its bold when it is a regular weight)."""
-    listed = template_id in LISTED_FX_CAPTION_TEMPLATES
+    """The look styles' card is Poppins ExtraBold unless the user picked a font of their own (a look's own caption
+    font is not a choice); other templates (the form styles included) use their caption font, its bold when it is a
+    regular weight."""
+    listed = template_id in LOOK_TEMPLATES
     if listed and (not font or font in _LOOK_FONTS):
         return HOOK_FONT
     font = str(font or HOOK_FONT)[:80]
@@ -50,9 +51,10 @@ def hook_font(template_id: str | None, font: str | None) -> str:
 
 
 def hook_text(title: str, template_id: str | None, uppercase: bool) -> str:
-    """The title as shown: one line of text, in capitals only for an all-caps template that is not a listed style."""
+    """The title as shown: one line of text, in capitals only for an all-caps look style (a form style's own casing
+    is a caption shape, not a headline style)."""
     text = " ".join(str(title or "").split())[:200]
-    return text.upper() if uppercase and template_id not in LISTED_FX_CAPTION_TEMPLATES else text
+    return text.upper() if uppercase and template_id not in LOOK_TEMPLATES else text
 
 
 def hook_accent(template_id: str | None, look: str, caption: FxCaptionStyle | None,
@@ -60,7 +62,7 @@ def hook_accent(template_id: str | None, look: str, caption: FxCaptionStyle | No
     """The marker colour: the captions' keyword colour, else the look's, else the template's emphasis colour."""
     if caption is not None:
         return _hex6(caption.accent, HOOK_DEFAULT_ACCENT)
-    if template_id in LISTED_FX_CAPTION_TEMPLATES:
+    if template_id in LOOK_TEMPLATES:
         return look_accent(str(template_id), look)
     template = template or {}
     return _hex6(template.get("emphasis_color") or template.get("highlight_color"), HOOK_DEFAULT_ACCENT)

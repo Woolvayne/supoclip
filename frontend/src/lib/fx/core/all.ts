@@ -9,6 +9,7 @@ import "./captions/kinetic_stack";
 import "./captions/decode_glitch";
 import "./captions/highlighter_swipe";
 import "./captions/face_doodles";
+import "./captions/forms";
 import "./grades";
 import "./picture/zoom";
 import "./picture/shake";

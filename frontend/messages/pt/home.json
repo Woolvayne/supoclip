@@ -492,6 +492,18 @@
       "face_doodles": {
         "name": "Rabiscos no rosto",
         "description": "Brilhos, chifres e setas que seguem o rosto de quem fala"
+      },
+      "caption_card": {
+        "name": "Cartão de legendas",
+        "description": "Linhas em um cartão de papel claro no terço inferior, uma por vez"
+      },
+      "one_word": {
+        "name": "Uma palavra",
+        "description": "Uma palavra enorme por vez, cortada na hora, a cada batida"
+      },
+      "lower_third": {
+        "name": "Tarja inferior",
+        "description": "Uma barra de nome no terço inferior, como em uma entrevista de TV"
       }
     }
   },

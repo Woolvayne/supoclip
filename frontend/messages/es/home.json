@@ -492,6 +492,18 @@
       "face_doodles": {
         "name": "Garabatos en la cara",
         "description": "Destellos, cuernos y flechas que siguen la cara de quien habla"
+      },
+      "caption_card": {
+        "name": "Tarjeta de subtítulos",
+        "description": "Líneas sobre una tarjeta de papel clara en el tercio inferior, una a una"
+      },
+      "one_word": {
+        "name": "Una palabra",
+        "description": "Una palabra enorme a la vez, cortada en seco en cada golpe"
+      },
+      "lower_third": {
+        "name": "Rótulo inferior",
+        "description": "Una barra de nombre en el tercio inferior, como en una entrevista de televisión"
       }
     }
   },

@@ -492,6 +492,18 @@
       "face_doodles": {
         "name": "Gesichtskritzeleien",
         "description": "Funkeln, Hörner und Pfeile, die dem Gesicht folgen"
+      },
+      "caption_card": {
+        "name": "Untertitel-Karte",
+        "description": "Zeilen auf einer hellen Papierkarte im unteren Drittel, eine nach der anderen"
+      },
+      "one_word": {
+        "name": "Ein Wort",
+        "description": "Ein riesiges Wort auf einmal, hart auf jedem Beat geschnitten"
+      },
+      "lower_third": {
+        "name": "Bauchbinde",
+        "description": "Eine Namensleiste im unteren Drittel, wie im Fernseh-Interview"
       }
     }
   },

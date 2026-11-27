@@ -444,13 +444,15 @@ def test_generated_emphasis_uses_plan_accents_only_for_fx_templates():
 
 def test_caption_looks_stay_legacy_unless_asked():
     from src.caption_templates import CAPTION_TEMPLATES
-    from src.edit_fx.contracts import FX_CAPTION_TEMPLATES
+    from src.edit_fx.contracts import FX_CAPTION_TEMPLATES, LISTED_FX_CAPTION_TEMPLATES
 
     legacy = caption_looks()
     assert list(legacy) == list(CAPTION_TEMPLATES) and not any("fx" in look for look in legacy.values())
     flagged = caption_looks(include_fx=True)
-    listed = [t for t in FX_CAPTION_TEMPLATES if t in ("highlighter_swipe", "emoji_drop", "behind_head")]
+    # The look styles and the form styles: the editor styles the form styles' captions from their own template too.
+    listed = [t for t in FX_CAPTION_TEMPLATES if t in LISTED_FX_CAPTION_TEMPLATES]
     assert list(flagged) == [*CAPTION_TEMPLATES, *listed]
+    assert flagged["caption_card"]["backgroundColor"] == "#F7F4EEF2" and flagged["one_word"]["wordPop"] is True
     assert flagged["emoji_drop"]["fx"] is True and flagged["emoji_drop"]["fxStyle"] == "emoji_drop"
     assert "slam" in caption_looks(include_fx=True, keep=("slam",))   # a stored unlisted style keeps its look
     assert flagged["default"] == legacy["default"]

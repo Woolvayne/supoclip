@@ -492,6 +492,18 @@
       "face_doodles": {
         "name": "Coretan Wajah",
         "description": "Kilau, tanduk, dan panah yang mengikuti wajah pembicara"
+      },
+      "caption_card": {
+        "name": "Kartu Takarir",
+        "description": "Baris di atas kartu kertas terang di sepertiga bawah, satu per satu"
+      },
+      "one_word": {
+        "name": "Satu Kata",
+        "description": "Satu kata besar sekaligus, dipotong keras di setiap ketukan"
+      },
+      "lower_third": {
+        "name": "Nama Bawah",
+        "description": "Bilah nama di sepertiga bawah, seperti wawancara televisi"
       }
     }
   },

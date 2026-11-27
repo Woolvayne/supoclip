@@ -520,11 +520,12 @@ def editor_caption_rows(layout: dict, captions: dict, duration: float) -> dict |
     of the session's look captions on clean.mp4's clock, seeded with their automatic ``captions.y``. None for other
     layouts, legacy or hidden templates (their drafts stay as they were) and layouts stored without their shots."""
     from ..edit_fx.caption_rows import interview_caption_rows
-    from ..edit_fx.contracts import is_listed_fx_template
+    from ..edit_fx.contracts import caption_look_for
 
     if not layout.get("baked") or layout.get("kind") not in ("interview", "compositor") or not layout.get("segments"):
         return None
-    if not is_listed_fx_template(captions.get("template")):
+    # Rows belong to the intensity looks; the form styles (subtitle card, one word, lower third) keep one row.
+    if caption_look_for(captions.get("template"), "off") == "template":
         return None
     rows = interview_caption_rows(
         layout["segments"], text_px=float(captions.get("size") or 54), width=1080, height=1920,

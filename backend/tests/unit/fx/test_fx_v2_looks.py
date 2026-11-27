@@ -11,6 +11,7 @@ from src.edit_fx.caption_style import LOOKS, fx_caption_style_from_document, loo
 from src.edit_fx.contracts import (
     FX_CAPTION_TEMPLATES,
     LISTED_FX_CAPTION_TEMPLATES,
+    LOOK_TEMPLATES,
     BeatTagLLM,
     EditPlanLLM,
     caption_look_for,
@@ -21,8 +22,13 @@ from src.media import fx_audio
 HIDDEN = ("marker_circle", "slam", "stat_counter", "kinetic_stack", "decode_glitch", "face_doodles")
 
 
-def test_only_three_animated_styles_are_listed_but_all_stay_valid():
-    assert set(LISTED_FX_CAPTION_TEMPLATES) == {"highlighter_swipe", "emoji_drop", "behind_head"}
+def test_the_listed_animated_styles_and_the_hidden_ones_stay_valid():
+    assert set(LISTED_FX_CAPTION_TEMPLATES) == {"highlighter_swipe", "emoji_drop", "behind_head",
+                                               "caption_card", "one_word", "lower_third"}
+    # Form styles are listed but keep their own shape: only the look styles follow the intensity.
+    assert LOOK_TEMPLATES == {"highlighter_swipe", "emoji_drop", "behind_head"}
+    for form in ("caption_card", "one_word", "lower_third"):
+        assert caption_look_for(form, "max", "normal") == "template"
     listed = [t["id"] for t in get_template_info(include_fx=True) if t.get("fx")]
     assert sorted(listed) == sorted(LISTED_FX_CAPTION_TEMPLATES)
     for template_id in HIDDEN:

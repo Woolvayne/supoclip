@@ -492,6 +492,18 @@
       "face_doodles": {
         "name": "Face Doodles",
         "description": "Sparkles, horns and arrows that follow the speaker's face"
+      },
+      "caption_card": {
+        "name": "Caption Card",
+        "description": "Lines on a clean paper card in the lower third, one at a time"
+      },
+      "one_word": {
+        "name": "One Word",
+        "description": "One huge word at a time, cut hard on every beat"
+      },
+      "lower_third": {
+        "name": "Lower Third",
+        "description": "A name-card bar in the lower third, like a broadcast interview"
       }
     }
   },

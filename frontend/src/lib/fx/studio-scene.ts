@@ -24,7 +24,7 @@ import { FACE_MAX_GAP } from "./core/scene";
 import {
   captionLookFor,
   isFxTemplate,
-  isListedFxTemplate,
+  isLookTemplate,
   type CaptionPlacement,
   type CaptionRow,
   type FaceTrack,
@@ -374,7 +374,7 @@ export function studioHook(doc: EditDocument): FxHookTitle | null {
   const range = hookRange(doc);
   if (!(range.end > range.start)) return null;
   const captions = doc.captions, templateId = captions.template || "default";
-  const listed = isListedFxTemplate(templateId);
+  const listed = isLookTemplate(templateId);
   const intensity = doc.fx?.style.intensity ?? "off", sensitivity = doc.fx?.sensitivity ?? "normal";
   const captionLook = captionLookFor(templateId, intensity, sensitivity);
   const look = captionLook !== "template" ? captionLook

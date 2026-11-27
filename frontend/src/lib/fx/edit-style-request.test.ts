@@ -104,7 +104,7 @@ describe("send-time sanitiser", () => {
     for (const template of FX_CAPTION_TEMPLATES) {
       const fields = fxCreateFields({ editStyle: bold, captionTemplate: template }, info);
       expect(fields).toEqual({ caption_template: sendableCaptionTemplate(template, false) });
-      expect(["default", "tiktok", "mrbeast", "minimal", "hormozi", "neon"]).toContain(fields.caption_template);
+      expect(["default", "tiktok", "mrbeast", "minimal", "hormozi", "neon", "podcast"]).toContain(fields.caption_template);
     }
     expect(fxCreateFields({ editStyle: bold, captionTemplate: "podcast" }, info)).toEqual({ caption_template: "podcast" });
     expect(fxCreateFields({ editStyle: null, captionTemplate: null }, info)).toEqual({ caption_template: "default" });

@@ -2,6 +2,7 @@
   "nav": {
     "create": "Create",
     "library": "Library",
+    "workflows": "Workflows",
     "social": "Social",
     "analytics": "Analytics",
     "agents": "Agents & API",
@@ -22,6 +23,8 @@
   "palette": {
     "newHint": "Paste a link or upload",
     "library": "Open library",
+    "workflows": "Workflows",
+    "workflowsHint": "Auto-clip new uploads from a channel",
     "social": "Social accounts",
     "socialHint": "Connect YouTube, TikTok & Instagram",
     "analyticsHint": "How your published clips perform",

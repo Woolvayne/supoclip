@@ -1,0 +1,21 @@
+{
+  "title": "Workflows",
+  "subtitle": "Watch a YouTube channel and every new upload gets clipped automatically.",
+  "channelLabel": "YouTube channel",
+  "channelPlaceholder": "https://www.youtube.com/@handle",
+  "add": "Watch channel",
+  "adding": "Adding…",
+  "loadError": "Could not load your workflows.",
+  "addError": "Could not add that channel.",
+  "listHeading": "Watched channels",
+  "empty": "No workflows yet. Add a channel to clip its new uploads automatically.",
+  "enabledLabel": "Automatic clipping",
+  "on": "On",
+  "off": "Paused",
+  "clipped": "{count} videos clipped",
+  "lastChecked": "Last checked {when}",
+  "never": "not checked yet",
+  "delete": "Delete",
+  "deleteConfirm": "Remove this workflow? Its new uploads will no longer be clipped automatically.",
+  "errorLabel": "Last error"
+}

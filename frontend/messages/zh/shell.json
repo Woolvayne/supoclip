@@ -2,6 +2,7 @@
   "nav": {
     "create": "创建",
     "library": "素材库",
+    "workflows": "工作流",
     "social": "社交",
     "analytics": "数据分析",
     "agents": "智能体与 API",
@@ -22,6 +23,8 @@
   "palette": {
     "newHint": "粘贴链接或上传文件",
     "library": "打开素材库",
+    "workflows": "工作流",
+    "workflowsHint": "自动剪辑频道的新视频",
     "social": "社交账号",
     "socialHint": "连接 YouTube、TikTok 和 Instagram",
     "analyticsHint": "已发布短片的表现",

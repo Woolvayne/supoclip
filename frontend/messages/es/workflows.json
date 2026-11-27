@@ -1,0 +1,21 @@
+{
+  "title": "Workflows",
+  "subtitle": "Supervisa un canal de YouTube y cada nuevo video se recortará automáticamente.",
+  "channelLabel": "Canal de YouTube",
+  "channelPlaceholder": "https://www.youtube.com/@handle",
+  "add": "Supervisar canal",
+  "adding": "Añadiendo…",
+  "loadError": "No se pudieron cargar tus workflows.",
+  "addError": "No se pudo añadir ese canal.",
+  "listHeading": "Canales supervisados",
+  "empty": "Aún no hay workflows. Añade un canal para recortar automáticamente sus nuevos videos.",
+  "enabledLabel": "Recorte automático",
+  "on": "Activo",
+  "off": "En pausa",
+  "clipped": "{count} videos recortados",
+  "lastChecked": "Última comprobación {when}",
+  "never": "sin comprobar",
+  "delete": "Eliminar",
+  "deleteConfirm": "¿Eliminar este workflow? Sus nuevos videos ya no se recortarán automáticamente.",
+  "errorLabel": "Último error"
+}

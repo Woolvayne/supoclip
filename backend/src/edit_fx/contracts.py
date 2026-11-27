@@ -48,13 +48,20 @@ INSTANT_KINDS: frozenset[str] = frozenset({"sfx", "freeze", "transition"})   # s
 FX_CAPTION_TEMPLATES: tuple[str, ...] = (
     "marker_circle", "emoji_drop", "slam", "behind_head", "stat_counter",
     "kinetic_stack", "decode_glitch", "highlighter_swipe", "face_doodles",
+    "caption_card", "one_word", "lower_third",
 )
 LEGACY_CAPTION_TEMPLATES: tuple[str, ...] = ("default", "hormozi", "mrbeast", "minimal", "tiktok", "neon", "podcast")
 # The animated styles offered in catalogues and pickers. The others stay valid ids (stored tasks, drafts and API
 # callers keep rendering them with their own drawers) but are never listed.
-LISTED_FX_CAPTION_TEMPLATES: tuple[str, ...] = ("highlighter_swipe", "emoji_drop", "behind_head")
-# Templates drawn with the intensity caption looks (CAPTION_LOOKS): phrase groups, word-by-word reveal, keyword boxes.
-LOOK_TEMPLATES: frozenset[str] = frozenset(LISTED_FX_CAPTION_TEMPLATES)
+LISTED_FX_CAPTION_TEMPLATES: tuple[str, ...] = (
+    "highlighter_swipe", "emoji_drop", "behind_head", "caption_card", "one_word", "lower_third",
+)
+# The listed styles that draw the clip's intensity caption looks (phrase groups, word-by-word reveal, keyword boxes).
+# The form styles (caption card, one word, lower third) are listed too, but they keep their own shape at every
+# intensity: their drawers lay the words out, and their hook title follows the intensity alone.
+LOOK_TEMPLATES: frozenset[str] = frozenset(
+    ("highlighter_swipe", "emoji_drop", "behind_head")
+)
 CaptionLook = Literal["template", "subtle", "bold", "max"]
 
 

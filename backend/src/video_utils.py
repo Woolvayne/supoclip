@@ -983,14 +983,14 @@ def _fx_ladder_setup(
 def _fx_hook_title(hook_title: str, *, plan: "FxPlan", caption_template: str, template: Dict[str, Any],
                    caption_style, font_family: Optional[str], window):
     """The hook title fx-core draws for a generated clip (``edit_fx.hook_title``)."""
-    from .edit_fx.contracts import is_listed_fx_template
+    from .edit_fx.contracts import LOOK_TEMPLATES
     from .edit_fx.hook_title import build_hook, hook_accent, hook_look
 
     look = hook_look(caption_template, plan.style.intensity, plan.sensitivity)
     return build_hook(
         hook_title, template_id=caption_template, look=look,
-        # The listed styles' captions use the look's own font, whatever the task's font.
-        font=None if is_listed_fx_template(caption_template) else (font_family or template.get("font_family")),
+        # The look styles' captions use the look's own font, whatever the task's font; a form style keeps its own.
+        font=None if caption_template in LOOK_TEMPLATES else (font_family or template.get("font_family")),
         accent=hook_accent(caption_template, look, caption_style, template),
         window=window, uppercase=bool(template.get("uppercase")),
     )

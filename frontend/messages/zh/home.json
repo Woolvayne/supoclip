@@ -492,6 +492,18 @@
       "face_doodles": {
         "name": "脸部涂鸦",
         "description": "跟随说话人脸部的闪光、恶魔角和箭头"
+      },
+      "caption_card": {
+        "name": "字幕卡片",
+        "description": "在画面下三分之一处的浅色纸卡上逐行显示"
+      },
+      "one_word": {
+        "name": "单词卡",
+        "description": "每次只显示一个超大字，按节拍硬切"
+      },
+      "lower_third": {
+        "name": "下三分之一条",
+        "description": "画面下三分之一处的名字条，像电视访谈"
       }
     }
   },

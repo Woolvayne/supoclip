@@ -7,7 +7,7 @@ import type {
   AccentCue, AccentVariant, DoodleKind, FaceTrack, FxCaptionStyle, FxCaptionTemplate, FxCue, FxScene, FxWord,
 } from "./core/types";
 import type { FxContext2D } from "./core/host";
-import { isListedFxTemplate } from "./core/types";
+import { isLookTemplate } from "./core/types";
 
 /** The demo renders in real output pixels so its layout is the clip's layout; tiles scale it down. */
 export const DEMO_WIDTH = 1080;
@@ -45,6 +45,9 @@ export const DEMO_TEMPLATE_LOOKS: Readonly<Record<FxCaptionTemplate, {
   decode_glitch: { font: "TikTokSans-Bold", size: 28, color: "#FFFFFF", accent: "#00F0FF", stroke: "#000000", strokeWidth: 2, shadow: true, background: null, y: 0.78, wordsPerLine: 3, uppercase: true },
   highlighter_swipe: { font: "Poppins-ExtraBold", size: 30, color: "#FFFFFF", accent: "#34FD87", stroke: null, strokeWidth: 0, shadow: false, background: "#170904D9", y: 0.55, wordsPerLine: 3, uppercase: false },
   face_doodles: { font: "TikTokSans-Bold", size: 30, color: "#FFFFFF", accent: "#FFD23F", stroke: "#000000", strokeWidth: 3, shadow: true, background: null, y: 0.78, wordsPerLine: 3, uppercase: false },
+  caption_card: { font: "Poppins-ExtraBold", size: 30, color: "#141414", accent: "#00A3FF", stroke: null, strokeWidth: 0, shadow: true, background: "#F7F4EEF2", y: 0.72, wordsPerLine: 4, uppercase: false },
+  one_word: { font: "THEBOLDFONT", size: 34, color: "#FFFFFF", accent: "#FF3D71", stroke: "#000000", strokeWidth: 4, shadow: true, background: null, y: 0.62, wordsPerLine: 1, uppercase: true },
+  lower_third: { font: "TikTokSans-Bold", size: 26, color: "#FFFFFF", accent: "#FFD23F", stroke: null, strokeWidth: 0, shadow: false, background: "#0B0B0FE6", y: 0.80, wordsPerLine: 5, uppercase: false },
 };
 
 /** Every font a demo scene draws with, for the host to load before the first real frame. */
@@ -56,7 +59,7 @@ export const DEMO_FONTS: readonly string[] = [...new Set([...Object.values(DEMO_
  */
 export function demoCaptionStyle(template: FxCaptionTemplate, width = DEMO_WIDTH, scale = 1): FxCaptionStyle {
   const look = DEMO_TEMPLATE_LOOKS[template];
-  if (isListedFxTemplate(template)) {
+  if (isLookTemplate(template)) {
     // == edit_fx.caption_style.look_caption_style(template, "bold"): the listed styles demo their Bold look.
     return {
       template, font: "Poppins-ExtraBold", size_px: Math.round(Math.round((72 * width) / 1080) * scale), color: "#FFFFFF",
@@ -153,6 +156,10 @@ export function demoCues(template: FxCaptionTemplate, words: readonly FxWord[], 
       doodle(template, 1, "sparkles", 0.3, 2.0, sticker),
       doodle(template, 2, "arrows", 2.15, 3.5, sticker),
     ];
+    // Form styles are their own mark: the shape is on screen the whole loop, no accent cue needed.
+    case "caption_card":
+    case "one_word":
+    case "lower_third": return [];
   }
 }
 

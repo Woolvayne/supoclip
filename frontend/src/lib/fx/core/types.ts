@@ -23,19 +23,25 @@ export type FxKind = "accent" | "zoom" | "shake" | "flash" | "glitch" | "desatur
   | "sfx" | "bleep" | "speed" | "freeze" | "sticker" | "reaction";
 export const INSTANT_KINDS: ReadonlySet<FxKind> = new Set(["sfx", "freeze", "transition"]);
 export const FX_CAPTION_TEMPLATES = ["marker_circle", "emoji_drop", "slam", "behind_head", "stat_counter",
-  "kinetic_stack", "decode_glitch", "highlighter_swipe", "face_doodles"] as const;
+  "kinetic_stack", "decode_glitch", "highlighter_swipe", "face_doodles", "caption_card", "one_word", "lower_third"] as const;
 export type FxCaptionTemplate = (typeof FX_CAPTION_TEMPLATES)[number];
 export const isFxTemplate = (id: string | null | undefined): id is FxCaptionTemplate =>
   !!id && (FX_CAPTION_TEMPLATES as readonly string[]).includes(id);
 /** The animated styles offered in catalogues and pickers; the others stay valid (stored tasks and drafts) but unlisted. */
-export const LISTED_FX_CAPTION_TEMPLATES = ["highlighter_swipe", "emoji_drop", "behind_head"] as const;
+export const LISTED_FX_CAPTION_TEMPLATES = ["highlighter_swipe", "emoji_drop", "behind_head",
+  "caption_card", "one_word", "lower_third"] as const;
 export const isListedFxTemplate = (id: string | null | undefined): boolean =>
   !!id && (LISTED_FX_CAPTION_TEMPLATES as readonly string[]).includes(id);
+/** == contracts.LOOK_TEMPLATES: the listed styles drawn with the intensity caption looks. The form styles
+ *  (caption card, one word, lower third) are listed too, but they keep their own shape at every intensity. */
+export const LOOK_TEMPLATES = ["highlighter_swipe", "emoji_drop", "behind_head"] as const;
+export const isLookTemplate = (id: string | null | undefined): boolean =>
+  !!id && (LOOK_TEMPLATES as readonly string[]).includes(id);
 export type CaptionLook = "template" | "subtle" | "bold" | "max";
-/** == contracts.caption_look_for: listed templates follow the intensity (off = Bold look, serious = Subtle). */
+/** == contracts.caption_look_for: the look templates follow the intensity (off = Bold look, serious = Subtle). */
 export function captionLookFor(template: string | null | undefined, intensity: string | null | undefined,
   sensitivity: string = "normal"): CaptionLook {
-  if (!isListedFxTemplate(template)) return "template";
+  if (!isLookTemplate(template)) return "template";
   if (sensitivity === "serious") return "subtle";
   return intensity === "subtle" || intensity === "bold" || intensity === "max" ? intensity : "bold";
 }

@@ -38,6 +38,10 @@ export const BASE_LOOKS: Record<FxCaptionTemplate, BaseLook> = {
   decode_glitch: { entrance: "none", active: "none", emphasis: true, shadow: "soft", strokeEm: 0.1, tracking: 0.04 },
   highlighter_swipe: { entrance: "rise", active: "none", emphasis: false, shadow: "none", strokeEm: 0, tracking: 0 },
   face_doodles: { entrance: "settle", active: "accent-pop", emphasis: false, shadow: "soft", strokeEm: 0.12, tracking: 0 },
+  // Form styles lay their own words out (captions/forms.ts): no line entrance, no word tracking.
+  caption_card: { entrance: "none", active: "none", emphasis: true, shadow: "none", strokeEm: 0, tracking: 0 },
+  one_word: { entrance: "none", active: "none", emphasis: true, shadow: "none", strokeEm: 0.1, tracking: 0.01 },
+  lower_third: { entrance: "none", active: "none", emphasis: true, shadow: "none", strokeEm: 0, tracking: 0 },
 };
 
 /** Accent-pop size of the spoken word (D11): 1 → 1.06 over 80 ms, then held. */

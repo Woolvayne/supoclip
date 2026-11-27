@@ -78,7 +78,7 @@ double-click an empty spot to add a sound) and a **Music lane** showing how the 
 change is one undoable step. See [editor.md](editor.md#dynamic-edits).
 
 The studio's **AI edit** field can change the same settings ("make it calmer", "no music"): it sets the `fx.*`
-settings (intensity, switches, mood, censoring, grade) and can switch the captions to one of the three listed styles.
+settings (intensity, switches, mood, censoring, grade) and can switch the captions to one of the six listed styles.
 
 ### Through the API, MCP and iOS
 
@@ -97,13 +97,35 @@ plays one real demo clip at Off, Subtle, Bold and Max (switch while it plays), p
 
 Template ids live in `FX_CAPTION_TEMPLATES_DICT` (`backend/src/caption_templates.py`), separate from the seven
 classic templates. Each names the classic template whose libass captions replace it when a clip renders without
-the drawing stage (`ass_fallback`). Three are offered (`LISTED_FX_CAPTION_TEMPLATES`):
+the drawing stage (`ass_fallback`). Six are offered (`LISTED_FX_CAPTION_TEMPLATES`): three **look styles** that draw
+the intensity's look, and three **form styles** that keep their own shape at every intensity.
+
+#### Look styles
+
+`contracts.LOOK_TEMPLATES` (the same three in fx-core, `core/types.ts`):
 
 | Id | Name | What it does | Classic fallback | Needs |
 |---|---|---|---|---|
 | `highlighter_swipe` | Highlighter | The key word of a caption group in CAPS, black on an opaque rounded box (green at Bold, yellow at Subtle and Max), there on the word's first frame and gone with its group. | `minimal` | – |
 | `emoji_drop` | Emoji Drop | An emoji (only one the model picked because it depicts a thing the words name: 💰, 🚗, 📈) under the caption, 0.26 W, 2 frames in, held until the caption group changes. Never a face emoji, never on a sad moment. | `tiktok` | – |
 | `behind_head` | Behind Head | One giant lowercase word (Archivo Black, 0.70 W, at most 0.16 H) behind the speaker: the person is cut out (matte) and drawn over it. On a wide shot it sits at chin/neck height; on a close-up (face at least 12 % of the height) it goes across the top of the head, so the head covers only the foot of its middle letters. It hard-cuts in on a reframe and out on the next; the captions step aside while it shows. Without a person in frame the word goes in front; on an interview's stacked two-shots it is dropped. | `minimal` | face, matte |
+
+#### Form styles
+
+These three are the subtitle *shapes* rather than another intensity look: `contracts.caption_look_for` answers
+`template` for them, so `FxCaptionStyle.look` stays `template` at Off, Subtle, Bold and Max, the editor's caption
+seed keeps the style's own font and size, and the hook title takes its font from the style instead of the look.
+The intensity still changes everything around them (zooms, sfx, music, grading, the hook). The drawers live in
+`frontend/src/lib/fx/core/captions/forms.ts`.
+
+| Id | Name | What it does | Classic fallback | Needs |
+|---|---|---|---|---|
+| `caption_card` | Subtitle Card | The phrase on a paper-white card (`#F7F4EE`, 95 %) with a thin accent rule down its left edge, dark ink `#141414`, up to 4 words, 30 px Poppins ExtraBold at 0.72 H; the key word in the accent colour. It rises 12 u in 140 ms. | `podcast` | – |
+| `one_word` | One Word | One word at a time, ALL CAPS, THE BOLD FONT: as large as 0.86 W allows (at most 3× the caption size, never past 0.3 H), black outline and soft shadow, at 0.62 H. Each word scales 1.35 → 1.0 in 110 ms. The keyword takes the accent colour. | `mrbeast` | – |
+| `lower_third` | Lower Third | A news-style lower third: a full-width near-black bar (`#0B0B0F`, 90 %) at 0.80 H with an accent block on its left, TikTok Sans Bold 26 px, up to 5 words, left-aligned, the block sliding in 24 u in 160 ms. | `podcast` | – |
+
+The form styles draw no look accents: their `cues` stay empty, and the shape is on screen for the whole phrase. A
+per-shot row (see below) applies only to the look styles, so a form style keeps one row.
 
 **Unlisted styles.** `marker_circle`, `slam`, `stat_counter`, `kinetic_stack`, `decode_glitch` and
 `face_doodles` (`hidden: True`) are no longer offered anywhere: not in `GET /caption-templates?include=fx`, the
@@ -207,7 +229,7 @@ The style follows the caption template (`HOOK_VARIANTS`), so the title belongs t
 
 | | |
 |---|---|
-| Type | Poppins ExtraBold for the listed styles (a font the user picked instead wins), other templates their caption font, never a regular weight (TikTok Sans Regular becomes Bold); sentence case as written (an unlisted all-caps template keeps capitals) |
+| Type | Poppins ExtraBold for the look styles (a font the user picked instead wins; a form style keeps its own font), other templates their caption font, never a regular weight (TikTok Sans Regular becomes Bold); sentence case as written (an unlisted all-caps template keeps capitals) |
 | Lines | balanced; one line under 62 % of the text width, else two or three (see Size); at most 0.88 W; never under the style's floor (58u stack, 64u outline) unless one word is wider than the frame. Text without spaces (Chinese, Japanese, Korean) breaks between characters |
 | Key words | numbers first, then power words (never, secret, million, …), at most two; a marker box covers the word, not its comma. The accent is the captions' keyword colour; one too pale or too dark becomes `#FFE45C`, and a template with its own accent keeps it |
 | Motion | in over 260 ms (0.86 → 1.035 → 1, fade over the first 120 ms), marker boxes wipe in left to right from 200 ms (180 ms each, the second 80 ms later), out over the last 200 ms (fade, 1 → 0.96). Subtle is 10 % smaller with no overshoot; Max tilts the title −2° |

@@ -7,6 +7,7 @@ Add a line here when a pull request changes something a user can see. Use **New*
 ## 2026-11-27
 
 - **New:** Workflows. Watch a YouTube channel and every new upload is clipped automatically — add the channel by link or @handle on the new Workflows tab, and each new video becomes a highlights task with your usual settings minutes after it goes up. Existing uploads are never clipped as backlog, a video you already queued by hand is not processed twice, and pausing a workflow stops the clipping until you turn it back on. ([#2](https://github.com/Woolvayne/supoclip/pull/2))
+- **New:** Three more animated caption styles that change the shape of your subtitles instead of only their look: Caption Card puts each line on a clean paper card in the lower third, One Word shows one huge word at a time, and Lower Third draws a broadcast-style name bar with an accent block. Unlike the existing animated styles, they keep the same shape at every edit intensity, and the clip's title is drawn in the style's own font. ([#3](https://github.com/Woolvayne/supoclip/pull/3))
 
 ## 2026-11-21
 

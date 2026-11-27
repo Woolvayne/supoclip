@@ -58,8 +58,11 @@ export const HOOK_VARIANTS: Readonly<Record<string, HookVariant>> = {
   // Clean captions: the label.
   tiktok: STACK, minimal: STACK, podcast: STACK, behind_head: STACK, emoji_drop: STACK, highlighter_swipe: STACK,
   stat_counter: STACK,
+  // Form styles: the clean label too, so the shape of the captions stays the clip's one loud element.
+  caption_card: STACK, lower_third: STACK,
   // Stroked, loud captions: outlined type in the template's own colours.
   default: OUTLINE,
+  one_word: { ...OUTLINE, sizeU: 98, strokeEm: 0.11 },
   marker_circle: OUTLINE,
   face_doodles: OUTLINE,
   slam: { ...OUTLINE, sizeU: 98, strokeEm: 0.11 },

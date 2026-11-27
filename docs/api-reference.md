@@ -332,7 +332,7 @@ the task catch-all proxy):
   "settings": [{"key": "sfx", "type": "bool", "default": true}, "…"],
   "music_moods": ["hype", "chill", "dramatic", "funny", "inspiring", "dark", "aggressive"],
   "grades": ["none", "punchy", "warm", "teal_orange", "noir", "vhs", "dream"],
-  "templates": ["emoji_drop", "behind_head", "highlighter_swipe"],
+  "templates": ["highlighter_swipe", "emoji_drop", "behind_head", "caption_card", "one_word", "lower_third"],
   "reactions_available": false
 }
 ```
@@ -351,7 +351,9 @@ choices, and ask `GET /caption-templates?include=fx`, only when it is `true`.
 
 - `censor`: `off`, `bleep`, `bleep_bar` (bleep and a bar over the mouth) or `bleep_pixelate`.
 - An animated `caption_template` with no `edit_style` is "style only": animated captions, nothing else.
-- `templates` lists the offered animated styles. The older ids (`marker_circle`, `slam`, `stat_counter`,
+- `templates` lists the offered animated styles: the three intensity looks and the three form styles
+  (`caption_card`, `one_word`, `lower_third`), which keep their own shape at every intensity.
+- The older ids (`marker_circle`, `slam`, `stat_counter`,
   `kinetic_stack`, `decode_glitch`, `face_doodles`) are no longer listed anywhere but stay valid:
   stored tasks and drafts that use them keep rendering with their own look, and the API still accepts them.
 - 422 `INVALID_EDIT_STYLE` for unknown keys or values, before any charge.

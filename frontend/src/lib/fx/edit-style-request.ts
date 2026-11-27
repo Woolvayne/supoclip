@@ -36,6 +36,9 @@ export const FX_ASS_FALLBACK: Readonly<Record<FxCaptionTemplate, string>> = {
   decode_glitch: "neon",
   highlighter_swipe: "minimal",
   face_doodles: "default",
+  caption_card: "podcast",
+  one_word: "mrbeast",
+  lower_third: "podcast",
 };
 
 /** Templates that only look right with a face in the picture (§5.3 `needs_face`). */

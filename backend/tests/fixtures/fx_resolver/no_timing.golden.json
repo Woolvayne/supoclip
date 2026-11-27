@@ -332,6 +332,117 @@
    " 21.400- 21.400 t1.tr            transition flash"
   ]
  },
+ "caption_card/off": {
+  "sha256": "3c03c536310011c7892ef6d43a0d096bc8b880518d5f3ab7c09021a8c0258b61",
+  "music": null,
+  "grade": "none",
+  "hook_title_suppressed": false,
+  "cues": []
+ },
+ "caption_card/subtle": {
+  "sha256": "5525142ea857a94206e98b28507a5643c1d1eb679582e4d497d04e0de2fc88a7",
+  "music": "hype-love-love-love -6.0/0.0",
+  "grade": "none",
+  "hook_title_suppressed": false,
+  "cues": []
+ },
+ "caption_card/bold": {
+  "sha256": "59d73b0931959d836f1d544dc47930779f430da2e80572c0e5f8de4561c9baf0",
+  "music": "hype-love-love-love -13.0/0.0",
+  "grade": "none",
+  "hook_title_suppressed": false,
+  "cues": [
+   "  9.767-  9.767 e294.sfx         sfx        impact#2 +0dB",
+   " 21.333- 21.333 t1.tr.sfx        sfx        whoosh#0 -2dB",
+   " 21.400- 21.400 t1.tr            transition flash"
+  ]
+ },
+ "caption_card/max": {
+  "sha256": "7210f093d5fe52c4b9817f5bd2244ecabb619c4ba5f428c3839c1042c1ae56fb",
+  "music": "hype-love-love-love -2.0/0.0",
+  "grade": "punchy",
+  "hook_title_suppressed": false,
+  "cues": [
+   "  9.733-  9.733 t0.tr.sfx        sfx        whoosh#5 -2dB",
+   "  9.800-  9.800 t0.tr            transition flash",
+   " 21.333- 21.333 t1.tr.sfx        sfx        whoosh#0 -2dB",
+   " 21.400- 21.400 t1.tr            transition flash"
+  ]
+ },
+ "one_word/off": {
+  "sha256": "9f83e82626ae05ab3c9268553ec30ef2d8a3c55fed27f8403a248f64a0c4d981",
+  "music": null,
+  "grade": "none",
+  "hook_title_suppressed": false,
+  "cues": []
+ },
+ "one_word/subtle": {
+  "sha256": "5e58042cffb45991f71c9560d1e920f7a8ae140b619bda67410701c27e979428",
+  "music": "hype-love-love-love -6.0/0.0",
+  "grade": "none",
+  "hook_title_suppressed": false,
+  "cues": []
+ },
+ "one_word/bold": {
+  "sha256": "9dc331ece71e31a83688ee458debcccd18716350095eae716dcc7c594f50cbd3",
+  "music": "hype-love-love-love -13.0/0.0",
+  "grade": "none",
+  "hook_title_suppressed": false,
+  "cues": [
+   "  9.767-  9.767 e294.sfx         sfx        impact#2 +0dB",
+   " 21.333- 21.333 t1.tr.sfx        sfx        whoosh#0 -2dB",
+   " 21.400- 21.400 t1.tr            transition flash"
+  ]
+ },
+ "one_word/max": {
+  "sha256": "9c4042a16d297bb1d2d88ab0269340c2956570f146d05b1df57b57d3ffee0578",
+  "music": "hype-love-love-love -2.0/0.0",
+  "grade": "punchy",
+  "hook_title_suppressed": false,
+  "cues": [
+   "  9.733-  9.733 t0.tr.sfx        sfx        whoosh#5 -2dB",
+   "  9.800-  9.800 t0.tr            transition flash",
+   " 21.333- 21.333 t1.tr.sfx        sfx        whoosh#0 -2dB",
+   " 21.400- 21.400 t1.tr            transition flash"
+  ]
+ },
+ "lower_third/off": {
+  "sha256": "a111c3134d684ddc47d346a4a4eae37edaf52c0da81b7fcd1762d4cf1ee220a2",
+  "music": null,
+  "grade": "none",
+  "hook_title_suppressed": false,
+  "cues": []
+ },
+ "lower_third/subtle": {
+  "sha256": "916fc2902b7994a375944c07eff15aa982bdf31f6d353b7dcea8887a93627a3e",
+  "music": "hype-love-love-love -6.0/0.0",
+  "grade": "none",
+  "hook_title_suppressed": false,
+  "cues": []
+ },
+ "lower_third/bold": {
+  "sha256": "394a6fea925b5d51c88945bcb8493561c55aaa3d15bb7d40d7e7b78230ab9f86",
+  "music": "hype-love-love-love -13.0/0.0",
+  "grade": "none",
+  "hook_title_suppressed": false,
+  "cues": [
+   "  9.767-  9.767 e294.sfx         sfx        impact#2 +0dB",
+   " 21.333- 21.333 t1.tr.sfx        sfx        whoosh#0 -2dB",
+   " 21.400- 21.400 t1.tr            transition flash"
+  ]
+ },
+ "lower_third/max": {
+  "sha256": "e5b1015bb6988e24c864b852c8c0f577c8655aedaa277d22bb9f141d72729f0d",
+  "music": "hype-love-love-love -2.0/0.0",
+  "grade": "punchy",
+  "hook_title_suppressed": false,
+  "cues": [
+   "  9.733-  9.733 t0.tr.sfx        sfx        whoosh#5 -2dB",
+   "  9.800-  9.800 t0.tr            transition flash",
+   " 21.333- 21.333 t1.tr.sfx        sfx        whoosh#0 -2dB",
+   " 21.400- 21.400 t1.tr            transition flash"
+  ]
+ },
  "default/subtle": {
   "sha256": "d15c6e2a334883849172b4fec63ad2f6fed6115f492b41e4be976fffef4424af",
   "music": "hype-love-love-love -6.0/0.0",

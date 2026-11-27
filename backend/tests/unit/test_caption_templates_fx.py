@@ -30,8 +30,14 @@ SPEC = {
     "decode_glitch": ("neon", False, False, "TikTokSans-Bold", "fade"),
     "highlighter_swipe": ("minimal", False, False, "Poppins-ExtraBold", "none"),
     "face_doodles": ("default", True, False, "TikTokSans-Bold", "karaoke"),
+    # Form styles: listed, intensity-independent, always their own fallback font and motion.
+    "caption_card": ("podcast", False, False, "Poppins-ExtraBold", "none"),
+    "one_word": ("mrbeast", False, False, "THEBOLDFONT", "pop"),
+    "lower_third": ("podcast", False, False, "TikTokSans-Bold", "none"),
 }
 FX_ONLY_KEYS = {"fx", "ass_fallback", "needs_face", "needs_matte"}
+# The animated styles offered everywhere (contracts.LISTED_FX_CAPTION_TEMPLATES, catalogue order).
+LISTED = ("highlighter_swipe", "emoji_drop", "behind_head", "caption_card", "one_word", "lower_third")
 HEX6 = re.compile(r"^#[0-9A-Fa-f]{6}$")
 HEX6_OR_8 = re.compile(r"^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$")
 
@@ -70,7 +76,8 @@ def test_each_fx_template_carries_every_legacy_key_with_valid_values(template_id
     legacy_keys = set(CAPTION_TEMPLATES["default"])
     # Unlisted templates carry "hidden": True (never offered, still rendered for stored tasks).
     assert set(template) - {"hidden"} == legacy_keys | FX_ONLY_KEYS
-    assert template.get("hidden", False) is (template_id not in ("highlighter_swipe", "emoji_drop", "behind_head"))
+    listed = ("highlighter_swipe", "emoji_drop", "behind_head", "caption_card", "one_word", "lower_third")
+    assert template.get("hidden", False) is (template_id not in listed)
     assert template["name"] and template["description"]
     assert HEX6.match(template["font_color"]) and HEX6.match(template["highlight_color"])
     assert template["emphasis_color"] is None or HEX6.match(template["emphasis_color"])
@@ -120,8 +127,7 @@ def test_template_info_appends_fx_entries_only_when_asked():
     assert with_fx[: len(legacy)] == legacy
     extra = with_fx[len(legacy):]
     # Only the listed styles are offered (catalogue order); unlisted ones stay valid ids but are never listed.
-    assert [entry["id"] for entry in extra] == [t for t in FX_CAPTION_TEMPLATES
-                                                if t in ("highlighter_swipe", "emoji_drop", "behind_head")]
+    assert [entry["id"] for entry in extra] == [t for t in FX_CAPTION_TEMPLATES if t in LISTED]
     by_id = {entry["id"]: entry for entry in extra}
     assert by_id["behind_head"]["requires"] == ["matte"]
     assert by_id["emoji_drop"]["requires"] == []
@@ -146,8 +152,7 @@ async def test_caption_templates_route_lists_fx_only_with_include_fx():
         response = await _get(f"/caption-templates?{query}")
         assert response.status_code == 200
         ids = [entry["id"] for entry in response.json()["templates"]]
-        assert ids == list(LEGACY_CAPTION_TEMPLATES) + [t for t in FX_CAPTION_TEMPLATES
-                                                        if t in ("highlighter_swipe", "emoji_drop", "behind_head")]
+        assert ids == list(LEGACY_CAPTION_TEMPLATES) + [t for t in FX_CAPTION_TEMPLATES if t in LISTED]
 
     other = await _get("/caption-templates?include=other")
     assert other.json() == default.json()

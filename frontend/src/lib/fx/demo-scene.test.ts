@@ -80,7 +80,9 @@ describe("demo scenes", () => {
     expect(drawerErrors(prepared)).toEqual([]);
   });
 
-  it.each(FX_CAPTION_TEMPLATES)("%s shows its accent in the reduced-motion frame", (template: FxCaptionTemplate) => {
+  // Form styles (caption card, one word, lower third) are their own mark: the shape is on screen without a cue.
+  it.each(FX_CAPTION_TEMPLATES.filter((template) => !["caption_card", "one_word", "lower_third"].includes(template))
+  )("%s shows its accent in the reduced-motion frame", (template: FxCaptionTemplate) => {
     const scene = demoScene(template);
     const withCues = frameOps(prepareScene(scene, fakeMeasureHost), clockAt(prepareScene(scene, fakeMeasureHost), DEMO_STATIC_T));
     const bare = prepareScene({ ...scene, cues: [] }, fakeMeasureHost);

@@ -4,6 +4,10 @@ What changed in SupoClip for people using the product. Newest dates are first.
 
 Add a line here when a pull request changes something a user can see. Use **New**, **Improved**, **Fixed**, or **Under the hood**, describe the change in plain language, and link the pull request. Skip internal-only work, or fold it into one **Under the hood** line. Do not include customer names, email addresses, user IDs, or anything else private.
 
+## 2026-11-27
+
+- **New:** Workflows. Watch a YouTube channel and every new upload is clipped automatically — add the channel by link or @handle on the new Workflows tab, and each new video becomes a highlights task with your usual settings minutes after it goes up. Existing uploads are never clipped as backlog, a video you already queued by hand is not processed twice, and pausing a workflow stops the clipping until you turn it back on. ([#2](https://github.com/Woolvayne/supoclip/pull/2))
+
 ## 2026-11-21
 
 - **Improved:** The site footer now shows SupoClip's full operating company imprint, including its registered address and contact phone number. ([#547](https://github.com/FujiwaraChoki/supoclip/pull/547))

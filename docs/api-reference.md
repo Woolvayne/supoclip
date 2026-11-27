@@ -100,6 +100,11 @@ These routes generally attach session context and then proxy or orchestrate back
 - `GET|POST|DELETE /api/social/[...path]`
   - Authenticated proxy for the backend `/social/*` routes
 
+### Auto-clip workflows
+
+- `GET|POST|PATCH|DELETE /api/auto-clip/[...path]`
+  - Authenticated proxy for the backend `/auto-clip/*` routes (watched YouTube channels)
+
 ### Admin
 
 - `GET /admin`
@@ -578,6 +583,35 @@ posts, poll asynchronous publishes and fail posts stuck in `publishing` for two
 hours, and hourly to refresh metrics. When the platform may already have the
 post (a timeout after the upload was sent, or a lost worker) the post fails with
 "Upload outcome unknown" and is never uploaded again automatically.
+
+## Auto-Clip Workflow Routes
+
+Source files:
+
+- `backend/src/api/routes/auto_clip.py`
+- `backend/src/services/auto_clip_service.py`
+- `backend/src/youtube_channels.py` (channel resolution and the upload feed)
+
+Workflows watch a YouTube channel and clip every new upload automatically.
+Requests accept signed session headers or an API key. With an active team
+workspace, workflows belong to the team; otherwise to the user.
+
+- `GET /auto-clip/`
+  - The workspace's workflows with status, last check and error info
+- `POST /auto-clip/`
+  - Body `{channel_url}`. Accepts a channel URL or `@handle`; resolves the
+    channel and starts watching it. Existing uploads are never clipped as
+    backlog
+- `PATCH /auto-clip/{workflow_id}`
+  - Body `{enabled}` to pause or resume a workflow
+- `DELETE /auto-clip/{workflow_id}`
+  - Stop watching the channel
+
+A cron job polls each enabled workflow's public upload feed every five minutes
+(no YouTube API key or quota). New uploads become regular highlights tasks with
+the workspace's defaults and are charged like any other task. A video already
+being processed is skipped, and when the plan's minutes run out the upload is
+retried on a later poll instead of being dropped.
 
 ## Auth and Identity Model
 

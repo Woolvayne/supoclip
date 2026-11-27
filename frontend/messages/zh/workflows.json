@@ -1,0 +1,21 @@
+{
+  "title": "工作流",
+  "subtitle": "关注一个 YouTube 频道，每个新视频都会自动剪辑。",
+  "channelLabel": "YouTube 频道",
+  "channelPlaceholder": "https://www.youtube.com/@handle",
+  "add": "关注频道",
+  "adding": "添加中…",
+  "loadError": "无法加载你的工作流。",
+  "addError": "无法添加该频道。",
+  "listHeading": "已关注的频道",
+  "empty": "还没有工作流。添加一个频道，自动剪辑它的新视频。",
+  "enabledLabel": "自动剪辑",
+  "on": "开启",
+  "off": "已暂停",
+  "clipped": "已剪辑 {count} 个视频",
+  "lastChecked": "上次检查 {when}",
+  "never": "尚未检查",
+  "delete": "删除",
+  "deleteConfirm": "删除这个工作流？它的新视频将不再自动剪辑。",
+  "errorLabel": "最近的错误"
+}

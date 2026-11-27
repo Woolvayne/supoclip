@@ -1,0 +1,21 @@
+{
+  "title": "Workflows",
+  "subtitle": "Acompanhe um canal do YouTube e cada novo vídeo será cortado automaticamente.",
+  "channelLabel": "Canal do YouTube",
+  "channelPlaceholder": "https://www.youtube.com/@handle",
+  "add": "Acompanhar canal",
+  "adding": "Adicionando…",
+  "loadError": "Não foi possível carregar seus workflows.",
+  "addError": "Não foi possível adicionar esse canal.",
+  "listHeading": "Canais acompanhados",
+  "empty": "Nenhum workflow ainda. Adicione um canal para cortar automaticamente os novos vídeos.",
+  "enabledLabel": "Corte automático",
+  "on": "Ativo",
+  "off": "Pausado",
+  "clipped": "{count} vídeos cortados",
+  "lastChecked": "Última verificação {when}",
+  "never": "não verificado",
+  "delete": "Excluir",
+  "deleteConfirm": "Remover este workflow? Os novos vídeos dele não serão mais cortados automaticamente.",
+  "errorLabel": "Último erro"
+}

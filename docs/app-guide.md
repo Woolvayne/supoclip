@@ -78,6 +78,24 @@ Status states used across the UI include:
 - `error`
 - `cancelled`
 
+### Workflows: `/workflows`
+
+The workflows screen watches YouTube channels so new uploads are clipped automatically.
+
+Users can:
+
+- Add a channel by its URL or @handle
+- See watched channels with their status, last check, and how many videos were clipped
+- Pause and resume a workflow
+- Remove a workflow
+
+How it works:
+
+- A background job polls every enabled workflow's public upload feed every few minutes (no YouTube API key needed)
+- When the channel publishes a new video, a normal highlights task is created for it with the user's default clip settings, charging plan minutes like any task created by hand
+- Only uploads that appear after the workflow was added are clipped; the existing backlog is left alone
+- A video the workspace is already processing is never queued twice, and when the plan's minutes run out the upload is retried later instead of being dropped
+
 ### Task Detail: `/tasks/[id]`
 
 This is the main post-submission workspace.

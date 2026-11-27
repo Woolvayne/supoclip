@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Bot, ChartColumn, CornerDownLeft, Film, ListChecks, ListOrdered, Play, Plus, Search, Settings, Share2, Shield, Sparkles, Target, Users,
+  Bot, ChartColumn, CornerDownLeft, Film, ListChecks, ListOrdered, Play, Plus, Search, Settings, Share2, Shield, Sparkles, Target, Users, Zap,
 } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
 import { useBillingSummary } from "@/hooks/use-billing-summary";
@@ -28,11 +28,12 @@ import type { Workflow } from "@/lib/workflows";
 
 // `mobile: false` keeps an item out of the five-slot mobile tab bar.
 // `social: true` items only show when social publishing is enabled for the user.
-type NavItem = { href: string; labelKey: "create" | "library" | "social" | "analytics" | "agents" | "settings"; icon: typeof Film; match: (path: string) => boolean; mobile?: boolean; social?: boolean };
+type NavItem = { href: string; labelKey: "create" | "library" | "workflows" | "social" | "analytics" | "agents" | "settings"; icon: typeof Film; match: (path: string) => boolean; mobile?: boolean; social?: boolean };
 
 const NAV: NavItem[] = [
   { href: "/", labelKey: "create", icon: Sparkles, match: (p) => p === "/" },
   { href: "/list", labelKey: "library", icon: Film, match: (p) => p.startsWith("/list") || p.startsWith("/tasks") },
+  { href: "/workflows", labelKey: "workflows", icon: Zap, match: (p) => p.startsWith("/workflows") },
   { href: "/settings/social", labelKey: "social", icon: Share2, match: (p) => p.startsWith("/settings/social"), social: true },
   { href: "/analytics", labelKey: "analytics", icon: ChartColumn, match: (p) => p.startsWith("/analytics"), social: true },
   { href: "/settings/api-keys", labelKey: "agents", icon: Bot, match: (p) => p.startsWith("/settings/api-keys"), mobile: false },
@@ -248,6 +249,7 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
         id: `new-${shortcut.id}`, label: tHome(`palette.${shortcut.id}`), href: `/?workflow=${shortcut.id}`, icon: shortcut.icon,
       })),
       { id: "library", label: t("palette.library"), href: "/list", icon: Film },
+      { id: "workflows", label: t("palette.workflows"), hint: t("palette.workflowsHint"), href: "/workflows", icon: Zap },
       ...(socialAccess === true ? [{ id: "social", label: t("palette.social"), hint: t("palette.socialHint"), href: "/settings/social", icon: Share2 },
       { id: "analytics", label: t("nav.analytics"), hint: t("palette.analyticsHint"), href: "/analytics", icon: ChartColumn }] : []),
       { id: "keys", label: t("nav.agents"), hint: t("palette.agentsHint"), href: "/settings/api-keys", icon: Bot },

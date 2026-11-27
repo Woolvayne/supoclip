@@ -2,6 +2,7 @@
   "nav": {
     "create": "Criar",
     "library": "Biblioteca",
+    "workflows": "Workflows",
     "social": "Redes",
     "analytics": "Análises",
     "agents": "Agentes e API",
@@ -22,6 +23,8 @@
   "palette": {
     "newHint": "Cole um link ou envie um arquivo",
     "library": "Abrir biblioteca",
+    "workflows": "Workflows",
+    "workflowsHint": "Corta automaticamente os novos vídeos de um canal",
     "social": "Contas sociais",
     "socialHint": "Conecte YouTube, TikTok e Instagram",
     "analyticsHint": "Como os seus clipes publicados performam",

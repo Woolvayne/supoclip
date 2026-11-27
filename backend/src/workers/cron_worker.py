@@ -32,6 +32,7 @@ from .media_cleanup import cleanup_media, copy_pending_uploads, sweep_orphaned_m
 from .redis_settings import arq_redis_settings, on_arq_startup  # noqa: E402
 from .media_replication import check_media_storage, replicate_pending_media  # noqa: E402
 from .tasks import (  # noqa: E402
+    check_auto_clip_workflows,
     dispatch_scheduled_social_posts,
     refresh_social_metrics,
 )
@@ -69,6 +70,13 @@ class CronWorkerSettings:
         scheduled(copy_pending_uploads, second=10, run_at_startup=True, timeout=1800),
         scheduled(dispatch_scheduled_social_posts, second=0, timeout=300),
         scheduled(refresh_social_metrics, minute=7, second=0, timeout=1800),
+        # Watched YouTube channels: poll for new uploads every five minutes.
+        scheduled(
+            check_auto_clip_workflows,
+            minute=set(range(0, 60, 5)),
+            second=25,
+            timeout=600,
+        ),
         # Off unless CANCELLATION_REVIEWS_ENABLED; a run handles at most three reviews.
         scheduled(process_cancellation_reviews, second=30, timeout=1800),
         # Retries feedback webhook deliveries the API's first attempt didn't send.

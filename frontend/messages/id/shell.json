@@ -2,6 +2,7 @@
   "nav": {
     "create": "Buat",
     "library": "Pustaka",
+    "workflows": "Workflows",
     "social": "Sosial",
     "analytics": "Analitik",
     "agents": "Agen & API",
@@ -22,6 +23,8 @@
   "palette": {
     "newHint": "Tempel tautan atau unggah",
     "library": "Buka pustaka",
+    "workflows": "Workflows",
+    "workflowsHint": "Potong otomatis video baru dari sebuah channel",
     "social": "Akun sosial",
     "socialHint": "Hubungkan YouTube, TikTok & Instagram",
     "analyticsHint": "Performa clip yang sudah kamu publikasikan",

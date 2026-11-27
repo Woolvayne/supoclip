@@ -258,6 +258,15 @@ async def dispatch_scheduled_social_posts(ctx: Dict[str, Any]) -> Dict[str, Any]
     }
 
 
+async def check_auto_clip_workflows(ctx: Dict[str, Any]) -> Dict[str, Any]:
+    """Cron: clip new uploads on every watched YouTube channel."""
+    from ..database import AsyncSessionLocal
+    from ..services.auto_clip_service import AutoClipService
+
+    async with AsyncSessionLocal() as db:
+        return await AutoClipService(db).check_new_uploads()
+
+
 async def refresh_social_metrics(ctx: Dict[str, Any]) -> Dict[str, Any]:
     """Cron: pull fresh audience metrics for recently published posts."""
     from ..database import AsyncSessionLocal

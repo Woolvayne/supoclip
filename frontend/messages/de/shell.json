@@ -2,6 +2,7 @@
   "nav": {
     "create": "Erstellen",
     "library": "Mediathek",
+    "workflows": "Workflows",
     "social": "Social",
     "analytics": "Analysen",
     "agents": "Agenten & API",
@@ -22,6 +23,8 @@
   "palette": {
     "newHint": "Link einfügen oder hochladen",
     "library": "Mediathek öffnen",
+    "workflows": "Workflows",
+    "workflowsHint": "Neue Uploads eines Kanals automatisch clippen",
     "social": "Social-Konten",
     "socialHint": "YouTube, TikTok und Instagram verbinden",
     "analyticsHint": "So laufen deine veröffentlichten Clips",

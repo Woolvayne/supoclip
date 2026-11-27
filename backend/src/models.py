@@ -492,3 +492,57 @@ class ProcessingCache(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class AutoClipWorkflow(Base):
+    """A watched YouTube channel whose new uploads are clipped automatically.
+
+    The public UI calls this a workflow; internally ``task.workflow`` is the
+    clip kind (highlights, series, …), so this table keeps the ``auto_clip_``
+    prefix and its own name.
+    """
+
+    __tablename__ = "auto_clip_workflows"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=generate_uuid_string
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    team_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("teams.id", ondelete="CASCADE"), nullable=True
+    )
+    channel_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    channel_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    channel_title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=sql_text("true")
+    )
+    # Newest video seen so far. NULL means "not seeded yet": the first check
+    # records what the channel already has instead of clipping its backlog.
+    last_video_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    last_video_published_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_checked_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_triggered_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    videos_clipped: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=sql_text("'0'")
+    )
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        Index("idx_auto_clip_workflows_user_id", "user_id"),
+        Index("idx_auto_clip_workflows_enabled", "enabled"),
+    )

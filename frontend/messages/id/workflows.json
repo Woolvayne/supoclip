@@ -1,0 +1,21 @@
+{
+  "title": "Workflows",
+  "subtitle": "Pantau channel YouTube dan setiap video baru akan dipotong otomatis.",
+  "channelLabel": "Channel YouTube",
+  "channelPlaceholder": "https://www.youtube.com/@handle",
+  "add": "Pantau channel",
+  "adding": "Menambahkan…",
+  "loadError": "Workflows Anda gagal dimuat.",
+  "addError": "Channel itu gagal ditambahkan.",
+  "listHeading": "Channel yang dipantau",
+  "empty": "Belum ada workflow. Tambahkan channel agar video barunya dipotong otomatis.",
+  "enabledLabel": "Pemotongan otomatis",
+  "on": "Aktif",
+  "off": "Dijeda",
+  "clipped": "{count} video dipotong",
+  "lastChecked": "Terakhir diperiksa {when}",
+  "never": "belum diperiksa",
+  "delete": "Hapus",
+  "deleteConfirm": "Hapus workflow ini? Video barunya tidak akan dipotong otomatis lagi.",
+  "errorLabel": "Terakhir error"
+}

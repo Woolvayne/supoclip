@@ -1,0 +1,21 @@
+{
+  "title": "Workflows",
+  "subtitle": "Überwache einen YouTube-Kanal – jeder neue Upload wird automatisch geclippt.",
+  "channelLabel": "YouTube-Kanal",
+  "channelPlaceholder": "https://www.youtube.com/@handle",
+  "add": "Kanal überwachen",
+  "adding": "Wird hinzugefügt…",
+  "loadError": "Deine Workflows konnten nicht geladen werden.",
+  "addError": "Dieser Kanal konnte nicht hinzugefügt werden.",
+  "listHeading": "Überwachte Kanäle",
+  "empty": "Noch keine Workflows. Füge einen Kanal hinzu, damit neue Uploads automatisch geclippt werden.",
+  "enabledLabel": "Automatisches Clipping",
+  "on": "Aktiv",
+  "off": "Pausiert",
+  "clipped": "{count} Videos geclippt",
+  "lastChecked": "Zuletzt geprüft {when}",
+  "never": "noch nicht geprüft",
+  "delete": "Löschen",
+  "deleteConfirm": "Diesen Workflow entfernen? Neue Uploads werden dann nicht mehr automatisch geclippt.",
+  "errorLabel": "Letzter Fehler"
+}

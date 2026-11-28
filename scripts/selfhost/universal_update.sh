@@ -12,10 +12,11 @@ if [[ -f "${SCRIPT_DIR}/update_vps_buffer.sh" ]]; then
 fi
 
 TMP_UPDATER="/tmp/supoclip_update_vps_buffer.sh"
+CB_TS="$(date +%s)"
 for url in \
-  "https://raw.githubusercontent.com/Woolvayne/supoclip/arena/1292b1b9-supoclip/scripts/selfhost/update_vps_buffer.sh" \
-  "https://raw.githubusercontent.com/Woolvayne/supoclip/main/scripts/selfhost/update_vps_buffer.sh"; do
-  if curl -fsSL --retry 2 --max-time 20 "${url}" -o "${TMP_UPDATER}" 2>/dev/null && grep -q "SupoClip" "${TMP_UPDATER}"; then
+  "https://raw.githubusercontent.com/Woolvayne/supoclip/arena/1292b1b9-supoclip/scripts/selfhost/update_vps_buffer.sh?cb=${CB_TS}" \
+  "https://raw.githubusercontent.com/Woolvayne/supoclip/main/scripts/selfhost/update_vps_buffer.sh?cb=${CB_TS}"; do
+  if curl -fsSL -H "Cache-Control: no-cache" --retry 2 --max-time 20 "${url}" -o "${TMP_UPDATER}" 2>/dev/null && grep -q "SupoClip" "${TMP_UPDATER}"; then
     sed -i 's/\r$//' "${TMP_UPDATER}"
     chmod +x "${TMP_UPDATER}"
     exec bash "${TMP_UPDATER}" "$@"

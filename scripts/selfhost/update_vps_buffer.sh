@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SUPOCLIP_SELFHEAL_REV=v4_nextserver_winmux
 # =============================================================================
 # SupoClip Universal Self-Heal, Recovery & Live Updater (WSL 1/2 & Ubuntu 22.04+)
 # =============================================================================
@@ -24,6 +25,49 @@ MAX_CORES="${SUPOCLIP_MAX_CPU_CORES:-2}"
 FORCE_REBUILD="${FORCE_REBUILD:-0}"
 FORCE_FRONTEND_BUILD="${FORCE_FRONTEND_BUILD:-${FORCE_REBUILD}}"
 SUPOCLIP_EXTERNAL_SUPERVISOR="${SUPOCLIP_EXTERNAL_SUPERVISOR:-0}"
+USE_PORT_MUX="${USE_PORT_MUX:-0}"
+
+stop_supoclip_processes() {
+  pkill -f "[r]un_supervisor.sh" >/dev/null 2>&1 || true
+  pkill -f "[p]ort1978_mux.js" >/dev/null 2>&1 || true
+  pkill -f "[s]rc.workers.run_workers" >/dev/null 2>&1 || true
+  pkill -f "[s]rc.workers.tasks.WorkerSettings" >/dev/null 2>&1 || true
+  pkill -f "[s]rc.workers.cron_worker.CronWorkerSettings" >/dev/null 2>&1 || true
+  pkill -f "[s]rc.workers.ai_worker.AIWorkerSettings" >/dev/null 2>&1 || true
+  pkill -f "[u]vicorn src.main:app" >/dev/null 2>&1 || true
+  pkill -f "^next-server" >/dev/null 2>&1 || true
+  pkill -f "[s]erver-request-timeout.cjs" >/dev/null 2>&1 || true
+
+  local port_pids=""
+  if command -v ss >/dev/null 2>&1; then
+    port_pids="$(ss -tlnp '( sport = :3107 or sport = :8000 )' 2>/dev/null | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u || true)"
+    for p in ${port_pids}; do
+      kill "${p}" >/dev/null 2>&1 || true
+    done
+  fi
+  if command -v fuser >/dev/null 2>&1; then
+    fuser -k 3107/tcp >/dev/null 2>&1 || true
+    fuser -k 8000/tcp >/dev/null 2>&1 || true
+  fi
+  sleep 1
+
+  if (echo >/dev/tcp/127.0.0.1/3107) >/dev/null 2>&1 || (echo >/dev/tcp/127.0.0.1/8000) >/dev/null 2>&1; then
+    pkill -9 -f "^next-server" >/dev/null 2>&1 || true
+    pkill -9 -f "[s]erver-request-timeout.cjs" >/dev/null 2>&1 || true
+    pkill -9 -f "[u]vicorn src.main:app" >/dev/null 2>&1 || true
+    if command -v ss >/dev/null 2>&1; then
+      port_pids="$(ss -tlnp '( sport = :3107 or sport = :8000 )' 2>/dev/null | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u || true)"
+      for p in ${port_pids}; do
+        kill -9 "${p}" >/dev/null 2>&1 || true
+      done
+    fi
+    if command -v fuser >/dev/null 2>&1; then
+      fuser -k -9 3107/tcp >/dev/null 2>&1 || true
+      fuser -k -9 8000/tcp >/dev/null 2>&1 || true
+    fi
+    sleep 1
+  fi
+}
 
 mkdir -p "${APP_DIR}" /var/lib/supoclip/uploads /var/lib/supoclip/clips /var/log/supoclip
 
@@ -355,12 +399,8 @@ if [[ "${SKIP_FRONTEND_BUILD}" == "1" ]]; then
   echo "    [OK] Frontend-Standalone vollstaendig & aktuell – kein Neubau noetig."
 else
   echo "    [BUILD] Baue/aktualisiere Next.js Standalone-Frontend (schonend auf max. ${MAX_CORES} Kernen)..."
-  # Pausiere Worker waehrend des Builds fuer freien RAM & CPU
-  pkill -f "/opt/supoclip/run_supervisor.sh" >/dev/null 2>&1 || true
-  pkill -f "src.workers.run_workers" >/dev/null 2>&1 || true
-  pkill -f "src.workers.ai_worker.AIWorkerSettings" >/dev/null 2>&1 || true
-  pkill -f "server-request-timeout.cjs" >/dev/null 2>&1 || true
-  sleep 1
+  # Pausiere Worker & alten Next-Server waehrend des Builds fuer freien RAM, CPU & Port 3107
+  stop_supoclip_processes
 
   if command -v pnpm >/dev/null 2>&1; then
     PNPM_BIN=(pnpm)
@@ -531,6 +571,7 @@ cat << SUPERVISOR_HEADER > /opt/supoclip/run_supervisor.sh
 #!/usr/bin/env bash
 set -u
 DISABLE_SIGN_UP_DEFAULT="${DISABLE_SIGN_UP_VAL}"
+USE_PORT_MUX_DEFAULT="${USE_PORT_MUX}"
 SUPERVISOR_HEADER
 
 cat << 'SUPERVISOR' >> /opt/supoclip/run_supervisor.sh
@@ -653,22 +694,29 @@ while true; do
     service redis-server start >/dev/null 2>&1 || redis-server --daemonize yes --bind 127.0.0.1 --port 6379 --dir /var/lib/supoclip >/dev/null 2>&1 || true
   fi
 
-  if [ -f /opt/bgutil/server/build/main.js ] && ! pgrep -f "/opt/bgutil/server/build/main.js" >/dev/null 2>&1; then
+  if [ -f /opt/bgutil/server/build/main.js ] \
+     && ! pgrep -f "[b]gutil/server/build/main.js" >/dev/null 2>&1 \
+     && ! (echo >/dev/tcp/127.0.0.1/4416) >/dev/null 2>&1; then
     (cd /opt/bgutil/server && node build/main.js --host 127.0.0.1 >>/var/log/supoclip/bgutil.log 2>&1 &)
   fi
-  if ! pgrep -f "uvicorn src.main:app" >/dev/null 2>&1; then
+  if ! pgrep -f "[u]vicorn src.main:app" >/dev/null 2>&1 \
+     && ! (echo >/dev/tcp/127.0.0.1/8000) >/dev/null 2>&1; then
     (cd /opt/supoclip/backend && SUPOCLIP_MAX_CPU_CORES="" DATABASE_URL="$ASYNC_DB_URL" SUPOCLIP_SERVICE=backend .venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8000 >>/var/log/supoclip/backend.log 2>&1 &)
   fi
-  if ! pgrep -f "src.workers.run_workers" >/dev/null 2>&1; then
+  if ! pgrep -f "[s]rc.workers.run_workers" >/dev/null 2>&1; then
     (cd /opt/supoclip/backend && ${WORKER_LIMIT_PREFIX[@]+"${WORKER_LIMIT_PREFIX[@]}"} env DATABASE_URL="$ASYNC_DB_URL" SUPOCLIP_SERVICE=worker .venv/bin/python -m src.workers.run_workers >>/var/log/supoclip/worker.log 2>&1 &)
   fi
-  if ! pgrep -f "src.workers.ai_worker.AIWorkerSettings" >/dev/null 2>&1; then
+  if ! pgrep -f "[s]rc.workers.ai_worker.AIWorkerSettings" >/dev/null 2>&1; then
     (cd /opt/supoclip/backend && ${WORKER_LIMIT_PREFIX[@]+"${WORKER_LIMIT_PREFIX[@]}"} env DATABASE_URL="$ASYNC_DB_URL" SUPOCLIP_SERVICE=ai-worker .venv/bin/arq src.workers.ai_worker.AIWorkerSettings >>/var/log/supoclip/ai-worker.log 2>&1 &)
   fi
-  if ! pgrep -f "server-request-timeout.cjs" >/dev/null 2>&1; then
+  if ! pgrep -f "^next-server" >/dev/null 2>&1 \
+     && ! pgrep -f "[s]erver-request-timeout.cjs" >/dev/null 2>&1 \
+     && ! (echo >/dev/tcp/127.0.0.1/3107) >/dev/null 2>&1; then
     (cd "$STANDALONE_DIR" && DATABASE_URL="$SYNC_DB_URL" PORT=3107 HOSTNAME=0.0.0.0 node --require ./server-request-timeout.cjs server.js >>/var/log/supoclip/frontend.log 2>&1 &)
   fi
-  if [ "${USE_PORT_MUX:-1}" = "1" ] && [ -f /opt/supoclip/port1978_mux.js ] && ! pgrep -f "/opt/supoclip/port1978_mux.js" >/dev/null 2>&1; then
+  if [ "${USE_PORT_MUX:-${USE_PORT_MUX_DEFAULT:-0}}" = "1" ] && [ -f /opt/supoclip/port1978_mux.js ] \
+     && ! pgrep -f "[p]ort1978_mux.js" >/dev/null 2>&1 \
+     && ! (echo >/dev/tcp/127.0.0.1/"$HTTPS_PORT") >/dev/null 2>&1; then
     (SSLIP_HOST="$SSLIP_HOST" HTTPS_PORT="$HTTPS_PORT" CADDY_INTERNAL_TLS_PORT=1979 node /opt/supoclip/port1978_mux.js >>/var/log/supoclip/port1978_mux.log 2>&1 &)
   fi
 
@@ -677,16 +725,10 @@ done
 SUPERVISOR
 chmod +x /opt/supoclip/run_supervisor.sh
 
-# Sauberer Neustart der App-Prozesse mit aktueller Konfiguration & neuem Code
-pkill -f "/opt/supoclip/run_supervisor.sh" >/dev/null 2>&1 || true
-pkill -f "/opt/supoclip/port1978_mux.js" >/dev/null 2>&1 || true
-pkill -f "src.workers.run_workers" >/dev/null 2>&1 || true
-pkill -f "src.workers.tasks.WorkerSettings" >/dev/null 2>&1 || true
-pkill -f "src.workers.cron_worker.CronWorkerSettings" >/dev/null 2>&1 || true
-pkill -f "src.workers.ai_worker.AIWorkerSettings" >/dev/null 2>&1 || true
-pkill -f "uvicorn src.main:app" >/dev/null 2>&1 || true
-pkill -f "server-request-timeout.cjs" >/dev/null 2>&1 || true
-sleep 1
+# Sauberer Neustart der App-Prozesse (inkl. next-server & Ports 3107/8000) mit frischen Logs
+stop_supoclip_processes
+: > /var/log/supoclip/frontend.log
+: > /var/log/supoclip/backend.log
 
 if [[ "${SUPOCLIP_EXTERNAL_SUPERVISOR}" == "1" ]]; then
   echo "    [OK] Supervisor-Skript bereit fuer persistenten Windows-WSL-Start."

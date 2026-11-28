@@ -26,6 +26,7 @@ from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 from .config import Config, get_config
 from .clip_duration import clip_duration
+from .openrouter_free import FreeOpenRouterSmartModel, is_free_openrouter_model
 from .runtime_settings import apply_settings_to_process_env
 from .workflows.prompts import instructions_block
 
@@ -508,9 +509,9 @@ _NATIVE_OUTPUT_ANTHROPIC_MODELS = frozenset({"claude-sonnet-5-5", "claude-haiku-
 
 def _uses_native_output(model_name: str) -> bool:
     provider, name = _split_llm_name(model_name)
-    return provider == "openrouter" or (
-        provider == "anthropic" and name in _NATIVE_OUTPUT_ANTHROPIC_MODELS
-    )
+    if provider == "openrouter":
+        return not is_free_openrouter_model(name)
+    return provider == "anthropic" and name in _NATIVE_OUTPUT_ANTHROPIC_MODELS
 
 
 def _build_transcript_model(
@@ -532,6 +533,16 @@ def _build_transcript_model(
         )
     if provider == "openrouter":
         fallback = runtime_config.openrouter_fallback_model
+        if is_free_openrouter_model(provider_model_name):
+            if not provider_model_name or "/" not in provider_model_name:
+                raise RuntimeError(
+                    "OpenRouter model must include its vendor, for example openrouter:openrouter/free."
+                )
+            return FreeOpenRouterSmartModel(
+                provider_model_name,
+                api_key=runtime_config.openrouter_api_key or "",
+                fallback_model=fallback,
+            )
         if not provider_model_name or "/" not in provider_model_name or "/" not in fallback:
             raise RuntimeError("OpenRouter primary and fallback models must use vendor/model IDs.")
         # The installed SDK predates Sonnet 5.5. Both selected models advertise

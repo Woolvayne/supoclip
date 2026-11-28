@@ -67,6 +67,7 @@ _PROVIDER_FLAG_GATES: dict[str, tuple[str, str]] = {
 PUBLISH_JOB_NAME = "publish_social_post"
 OAUTH_STATE_TTL_SECONDS = 600
 MEDIA_TOKEN_TTL_HOURS = 3
+BUFFER_MEDIA_TOKEN_TTL_HOURS = 168
 # Instagram fetches the video while it processes the container (polled for up
 # to 10 minutes), so presigned S3 URLs outlive one publish attempt comfortably.
 PUBLIC_MEDIA_URL_TTL_SECONDS = MEDIA_TOKEN_TTL_HOURS * 3600
@@ -373,6 +374,66 @@ class SocialService:
         )
         return account
 
+    async def connect_buffer_api_key(
+        self,
+        user_id: str,
+        api_key: Optional[str] = None,
+        *,
+        team_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Validate a Buffer personal API key and upsert all active Buffer channels."""
+        from ..social.buffer import BufferProvider, normalize_buffer_token
+
+        provider = self._provider("buffer")
+        await self._ensure_not_paused("buffer", user_id)
+        assert isinstance(provider, BufferProvider)
+
+        token = normalize_buffer_token(api_key or self.config.buffer_api_key or "")
+        if not token:
+            raise SocialValidationError(
+                "Enter your Buffer API key from publish.buffer.com/settings/api."
+            )
+
+        try:
+            profiles = await self._call_provider(provider.list_channels, token)
+        except SocialProviderError as exc:
+            raise SocialValidationError(str(exc)) from exc
+
+        if not profiles:
+            raise SocialValidationError(
+                "Connected to Buffer, but no social channels were found in your Buffer "
+                "organization. Connect TikTok, Instagram, or YouTube inside Buffer first, "
+                "then try again."
+            )
+
+        encrypted_token = encrypt_setting_value(token)
+        connected_accounts: List[Dict[str, Any]] = []
+        for profile in profiles:
+            account = await self.repo.upsert_account(
+                self.db,
+                user_id=user_id,
+                provider="buffer",
+                external_account_id=profile.external_account_id,
+                display_name=profile.display_name,
+                username=profile.username,
+                avatar_url=profile.avatar_url,
+                access_token_encrypted=encrypted_token,
+                refresh_token_encrypted=None,
+                token_expires_at=None,
+                scopes="graphql",
+                metadata=profile.metadata,
+                **_team_kw(team_id),
+            )
+            connected_accounts.append(account)
+
+        logger.info(
+            "Connected %d Buffer channel(s) for user %s (team=%s)",
+            len(connected_accounts),
+            user_id,
+            team_id,
+        )
+        return connected_accounts
+
     async def disconnect(
         self, user_id: str, account_id: str, *, team_id: Optional[str] = None
     ) -> bool:
@@ -485,6 +546,19 @@ class SocialService:
     # ------------------------------------------------------------------
     # Posts
     # ------------------------------------------------------------------
+    async def _task_credit_channel(self, task_id: str) -> Optional[str]:
+        load_fn = getattr(self.task_repo, "load_source_metadata", None)
+        if not callable(load_fn):
+            return None
+        try:
+            meta = await load_fn(self.db, task_id)
+        except Exception:
+            return None
+        if not isinstance(meta, dict) or meta.get("source_watermark") is False:
+            return None
+        raw = meta.get("watermark_text") or meta.get("source_channel")
+        return raw.strip() if isinstance(raw, str) and raw.strip() else None
+
     async def generate_caption(
         self,
         user_id: str,
@@ -492,9 +566,13 @@ class SocialService:
         task_id: str,
         clip_id: str,
         provider: str,
+        include_hashtags: bool = False,
         team_id: Optional[str] = None,
-    ) -> Dict[str, str]:
-        from .social_caption_service import generate_social_caption
+    ) -> Dict[str, Any]:
+        from .social_caption_service import (
+            generate_social_caption,
+            generate_social_post_metadata,
+        )
 
         task = await self.task_repo.get_task_by_id(self.db, task_id)
         task_allowed = (
@@ -514,16 +592,241 @@ class SocialService:
             raise SocialValidationError("Unsupported social platform")
         if not (clip.get("text") or "").strip():
             raise SocialValidationError("This clip has no transcript to draft a caption from.")
-        if not self.config.anthropic_api_key:
+        can_use_self_host_llm = False
+        if not self.config.anthropic_api_key and self.config.self_host:
+            from ..ai import _get_missing_llm_key_error
+
+            can_use_self_host_llm = (
+                _get_missing_llm_key_error(self.config.llm, self.config) is None
+            )
+        if not self.config.anthropic_api_key and not can_use_self_host_llm:
             raise SocialProviderUnavailable("Caption generation requires ANTHROPIC_API_KEY on the server.")
+        source_channel = await self._task_credit_channel(task_id)
+        channel_kwargs = {"source_channel": source_channel} if source_channel else {}
         try:
-            caption = await generate_social_caption(self.config.anthropic_api_key, clip, provider)
+            if include_hashtags:
+                meta = await generate_social_post_metadata(
+                    self.config.anthropic_api_key or "",
+                    clip,
+                    provider,
+                    allow_fallback=False,
+                    **channel_kwargs,
+                )
+                return {
+                    "caption": meta["caption"],
+                    "hashtags": meta["hashtags"],
+                    "title": meta["title"],
+                }
+            caption = await generate_social_caption(
+                self.config.anthropic_api_key or "",
+                clip,
+                provider,
+                **channel_kwargs,
+            )
         except Exception as exc:
             logger.warning("Social caption generation failed (%s)", type(exc).__name__)
             raise SocialProviderUnavailable(
                 "Couldn't generate a caption. Try again or write your own."
             ) from exc
         return {"caption": caption}
+
+    async def auto_publish_clips(
+        self,
+        user_id: str,
+        *,
+        task_id: str,
+        clip_ids: Optional[List[str]] = None,
+        social_account_ids: Optional[List[str]] = None,
+        mode: str = "staggered",
+        interval_minutes: int = 60,
+        team_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Auto-generate caption, hashtags, and title per clip and publish/schedule across active accounts."""
+        import asyncio
+        from .social_caption_service import (
+            fallback_social_post_metadata,
+            generate_social_post_metadata,
+        )
+
+        normalized_mode = (mode or "staggered").strip().lower()
+        if normalized_mode not in {"staggered", "now"}:
+            raise SocialValidationError("Unsupported auto-publish mode.")
+        interval_minutes = max(15, min(1440, int(interval_minutes or 60)))
+
+        task = await self.task_repo.get_task_by_id(self.db, task_id)
+        task_allowed = (
+            task is not None
+            and (
+                task.get("team_id") == team_id
+                if team_id
+                else task.get("team_id") is None and task.get("user_id") == user_id
+            )
+        )
+        if not task_allowed:
+            raise SocialNotFound("Task not found")
+
+        all_task_clips = await self.clip_repo.get_clips_by_task(self.db, task_id)
+        all_task_clips.sort(
+            key=lambda c: (
+                c.get("part_number") if c.get("part_number") is not None else 999999,
+                c.get("clip_order") if c.get("clip_order") is not None else 999999,
+            )
+        )
+        if clip_ids:
+            by_id = {c["id"]: c for c in all_task_clips}
+            target_clips = [by_id[cid] for cid in clip_ids if cid in by_id]
+            if not target_clips:
+                raise SocialNotFound("Clip not found")
+        else:
+            target_clips = all_task_clips
+
+        if not target_clips:
+            raise SocialValidationError("No clips available to publish yet.")
+
+        connections = await self.list_connections(user_id, team_id=team_id)
+        requested_accounts = set(social_account_ids) if social_account_ids else None
+        active_accounts: List[tuple[Dict[str, Any], Optional[str]]] = []
+        for conn in connections:
+            if requested_accounts is not None and conn["id"] not in requested_accounts:
+                continue
+            if conn.get("status") != "active" or conn.get("revoked_at"):
+                continue
+            prov_name = conn.get("provider") or ""
+            try:
+                prov = self._provider(prov_name)
+                await self._ensure_not_paused(prov_name, user_id)
+            except (SocialNotFound, SocialProviderUnavailable):
+                continue
+            privacy_choice: Optional[str] = prov.default_privacy_level
+            if prov.name == "tiktok":
+                try:
+                    opts = await self.publishing_options(user_id, conn["id"], team_id=team_id)
+                    levels = opts.get("privacy_levels") or []
+                    if "public" in levels:
+                        privacy_choice = "public"
+                    elif levels:
+                        privacy_choice = levels[0]
+                    else:
+                        continue
+                except SocialValidationError:
+                    continue
+            active_accounts.append((conn, privacy_choice))
+
+        if not active_accounts:
+            raise SocialValidationError(
+                "No active connected social accounts found. Connect Buffer or another platform in Social Settings first."
+            )
+
+        existing_task_posts = await self.list_posts(
+            user_id, task_id=task_id, limit=500, team_id=team_id
+        )
+        already_handled = {
+            (p.get("clip_id"), p.get("social_account_id"))
+            for p in existing_task_posts
+            if p.get("status") in {"queued", "publishing", "scheduled", "published"}
+        }
+
+        clip_plan: List[tuple[Dict[str, Any], List[tuple[Dict[str, Any], Optional[str]]]]] = []
+        skipped_clips = 0
+        for clip in target_clips:
+            pending_accounts = [
+                (acc, priv)
+                for acc, priv in active_accounts
+                if (clip["id"], acc["id"]) not in already_handled
+            ]
+            if not pending_accounts:
+                skipped_clips += 1
+                continue
+            clip_plan.append((clip, pending_accounts))
+
+        if not clip_plan:
+            return {
+                "posts": [],
+                "total_posts": 0,
+                "clips_published_or_scheduled": 0,
+                "skipped_clips": skipped_clips,
+                "first_scheduled_for": None,
+                "last_scheduled_for": None,
+            }
+
+        now = datetime.now(timezone.utc)
+        latest_future: Optional[datetime] = None
+        if normalized_mode == "staggered":
+            scheduled_posts = await self.list_posts(
+                user_id, status="scheduled", limit=200, team_id=team_id
+            )
+            for sp in scheduled_posts:
+                dt = _parse_datetime(sp.get("scheduled_for"))
+                if dt and dt > now and (latest_future is None or dt > latest_future):
+                    latest_future = dt
+
+            needs_future_slot = len(clip_plan) > 1 or latest_future is not None
+            if needs_future_slot and not await self.can_schedule(user_id, team_id=team_id):
+                raise SocialPlanRequired("Scheduled publishing requires an upgraded plan.")
+
+        can_use_llm = bool(self.config.anthropic_api_key)
+        if not can_use_llm and self.config.self_host:
+            from ..ai import _get_missing_llm_key_error
+
+            can_use_llm = _get_missing_llm_key_error(self.config.llm, self.config) is None
+
+        primary_provider = active_accounts[0][0]["provider"]
+        source_channel = await self._task_credit_channel(task_id)
+        channel_kwargs = {"source_channel": source_channel} if source_channel else {}
+        semaphore = asyncio.Semaphore(2)
+
+        async def _draft_for_clip(clip: Dict[str, Any]) -> Dict[str, Any]:
+            if not can_use_llm:
+                return fallback_social_post_metadata(clip, **channel_kwargs)
+            async with semaphore:
+                return await generate_social_post_metadata(
+                    self.config.anthropic_api_key or "",
+                    clip,
+                    primary_provider,
+                    allow_fallback=True,
+                    **channel_kwargs,
+                )
+
+        drafts = await asyncio.gather(*(_draft_for_clip(clip) for clip, _ in clip_plan))
+
+        created_posts: List[Dict[str, Any]] = []
+        scheduled_times: List[str] = []
+        for slot_idx, ((clip, pending_accounts), meta) in enumerate(zip(clip_plan, drafts)):
+            scheduled_iso: Optional[str] = None
+            if normalized_mode == "staggered":
+                if latest_future is not None:
+                    slot_dt = latest_future + timedelta(minutes=interval_minutes * (slot_idx + 1))
+                    scheduled_iso = slot_dt.isoformat()
+                elif slot_idx > 0:
+                    slot_dt = now + timedelta(minutes=interval_minutes * slot_idx)
+                    scheduled_iso = slot_dt.isoformat()
+
+            if scheduled_iso:
+                scheduled_times.append(scheduled_iso)
+
+            for acc, priv in pending_accounts:
+                post = await self.create_post(
+                    user_id,
+                    task_id=task_id,
+                    clip_id=clip["id"],
+                    social_account_id=acc["id"],
+                    title=meta.get("title"),
+                    caption=meta.get("caption"),
+                    hashtags=meta.get("hashtags"),
+                    privacy_level=priv,
+                    scheduled_for=scheduled_iso,
+                    team_id=team_id,
+                )
+                created_posts.append(post)
+
+        return {
+            "posts": created_posts,
+            "total_posts": len(created_posts),
+            "clips_published_or_scheduled": len(clip_plan),
+            "skipped_clips": skipped_clips,
+            "first_scheduled_for": scheduled_times[0] if scheduled_times else None,
+            "last_scheduled_for": scheduled_times[-1] if scheduled_times else None,
+        }
 
     async def create_post(
         self,
@@ -771,6 +1074,10 @@ class SocialService:
         platform fetches exactly what the publish attempt resolved. Returns an
         ``s3://`` reference or an existing local path.
         """
+        if not media_token:
+            return None
+        if media_token.lower().endswith(".mp4"):
+            media_token = media_token[:-4]
         if not media_token or len(media_token) > 64:
             return None
         post = await self.repo.get_post_by_media_token(self.db, media_token)
@@ -829,9 +1136,10 @@ class SocialService:
             raise missing
         public_url = None
         if post.get("media_token"):
+            suffix = ".mp4" if post.get("provider") == "buffer" else ""
             public_url = (
                 f"{self.config.social_public_media_base_url}/api/social/media/"
-                f"{post['media_token']}"
+                f"{post['media_token']}{suffix}"
             )
         return reference, public_url
 
@@ -852,11 +1160,16 @@ class SocialService:
             logger.info("Skipping publish for post %s in status %s", post_id, post["status"])
             return post
 
+        ttl_hours = (
+            BUFFER_MEDIA_TOKEN_TTL_HOURS
+            if post.get("provider") == "buffer"
+            else MEDIA_TOKEN_TTL_HOURS
+        )
         claimed = await self.repo.claim_post(
             self.db,
             post_id,
             media_token_expires_at=datetime.now(timezone.utc)
-            + timedelta(hours=MEDIA_TOKEN_TTL_HOURS),
+            + timedelta(hours=ttl_hours),
         )
         if not claimed:
             logger.info("Post %s was claimed or left the queue; not uploading", post_id)
@@ -1387,6 +1700,8 @@ def _fallback_post_url(
         return None
     if provider == "instagram":
         return None
+    if provider == "buffer":
+        return "https://publish.buffer.com"
     return None
 
 

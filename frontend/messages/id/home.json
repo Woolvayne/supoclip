@@ -541,5 +541,9 @@
       "title": "Video ini melebihi batas {minutes} menit kamu",
       "body": "Video ini lebih panjang dari yang diizinkan paketmu, dan bagiannya tidak bisa dipilih di sini. Coba rekaman lengkapnya atau video yang lebih pendek. Tidak ada menit yang terpakai."
     }
-  }
+  },
+  "sourceWatermark": "Watermark kredit kanal",
+  "sourceWatermarkHint": "Menambahkan \"Credit: NamaKanal\" secara otomatis di pojok kiri atas video dan di caption sosial.",
+  "sourceChannelLabel": "Nama kanal khusus (opsional)",
+  "sourceChannelPlaceholder": "Deteksi otomatis dari kanal sumber"
 }

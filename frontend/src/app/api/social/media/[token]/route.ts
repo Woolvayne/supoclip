@@ -11,11 +11,12 @@ export async function GET(
   { params }: { params: Promise<{ token: string }> },
 ) {
   const { token } = await params;
-  if (!SAFE_TOKEN.test(token)) {
+  const cleanToken = token.replace(/\.mp4$/i, "");
+  if (!SAFE_TOKEN.test(cleanToken)) {
     return Response.json({ detail: "Media not found" }, { status: 404 });
   }
 
-  const upstream = await fetchBackend(`/social/media/${token}`, {
+  const upstream = await fetchBackend(`/social/media/${cleanToken}`, {
     method: "GET",
     extraHeaders: {
       ...(request.headers.get("range") ? { Range: request.headers.get("range") as string } : {}),

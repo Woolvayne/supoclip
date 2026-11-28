@@ -541,5 +541,9 @@
       "title": "Este video supera tu límite de {minutes} minutos",
       "body": "Dura más de lo que permite tu plan y aquí no se puede elegir una parte. Prueba con la grabación final o con un video más corto. No se usaron minutos."
     }
-  }
+  },
+  "sourceWatermark": "Marca de agua del canal (Credit)",
+  "sourceWatermarkHint": "Incrusta automáticamente «Credit: Canal» arriba a la izquierda y añade el crédito en los textos sociales.",
+  "sourceChannelLabel": "Nombre del canal personalizado (opcional)",
+  "sourceChannelPlaceholder": "Detectar automáticamente del canal"
 }

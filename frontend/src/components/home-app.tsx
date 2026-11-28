@@ -185,6 +185,8 @@ export default function HomeApp() {
   const clipLengthEdited = useRef(false);
   const clipLengthSave = useRef<Promise<unknown>>(Promise.resolve());
   const [addSubtitles, setAddSubtitles] = useState(true);
+  const [sourceWatermark, setSourceWatermark] = useState(true);
+  const [sourceChannelOverride, setSourceChannelOverride] = useState("");
   const [brollAvailable, setBrollAvailable] = useState(false);
   const [includeBroll, setIncludeBroll] = useState(false);
   const [cutLongPauses, setCutLongPauses] = useState(true);
@@ -945,6 +947,8 @@ export default function HomeApp() {
         filtered_words: normalizedFilteredWords,
         // Only when intensity isn't off: an off request stays exactly today's.
         ...(fxFields.edit_style ? { edit_style: fxFields.edit_style } : {}),
+        ...(!sourceWatermark ? { source_watermark: false } : {}),
+        ...(sourceWatermark && sourceChannelOverride.trim() ? { source_channel: sourceChannelOverride.trim() } : {}),
       };
       // Plain highlights without instructions sends exactly the request it always has.
       const options: WorkflowOptions = {};
@@ -1424,6 +1428,29 @@ export default function HomeApp() {
                             </div>
                           </div>
                         </Disclosure>
+                      </div>
+                      <div className="space-y-2.5 border-t pt-3">
+                        <div className="flex items-center justify-between gap-4">
+                          <div>
+                            <label htmlFor="source-watermark" className="text-sm font-medium">{t("sourceWatermark")}</label>
+                            <p className="text-xs text-muted-foreground">{t("sourceWatermarkHint")}</p>
+                          </div>
+                          <Switch id="source-watermark" checked={sourceWatermark} onCheckedChange={setSourceWatermark} disabled={controlsDisabled} />
+                        </div>
+                        {sourceWatermark && (
+                          <div className="space-y-1">
+                            <label htmlFor="source-channel-override" className="text-xs font-medium text-muted-foreground">{t("sourceChannelLabel")}</label>
+                            <Input
+                              id="source-channel-override"
+                              value={sourceChannelOverride}
+                              onChange={(e) => setSourceChannelOverride(e.target.value)}
+                              placeholder={t("sourceChannelPlaceholder")}
+                              maxLength={80}
+                              disabled={controlsDisabled}
+                              className="h-8 text-xs"
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) },

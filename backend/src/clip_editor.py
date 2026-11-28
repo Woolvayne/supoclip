@@ -255,6 +255,7 @@ def overlay_custom_captions(
     source_ranges: Optional[List[tuple[float, float]]] = None,
     position_y: Optional[float] = None,
     output_offsets: Optional[List[float]] = None,
+    watermark_text: Optional[str] = None,
 ) -> Path:
     """Burn edited captions onto ``input_path``.
 
@@ -264,7 +265,8 @@ def overlay_custom_captions(
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / _safe_name("caption")
-    if not caption_text.strip():
+    has_caption = bool(caption_text.strip())
+    if not has_caption and not watermark_text:
         _run(["ffmpeg", "-y", "-i", str(input_path), *_encode_args(), str(output_path)])
         return output_path
 
@@ -278,16 +280,16 @@ def overlay_custom_captions(
     ass_path = output_dir / f"captions_{uuid.uuid4().hex[:12]}.ass"
 
     transcript_path = transcript_video_path or input_path
-    transcript_data = load_cached_transcript_data(transcript_path)
+    transcript_data = load_cached_transcript_data(transcript_path) if has_caption else None
     timed_words: List[Dict[str, Any]] = []
-    if transcript_data and transcript_data.get("words"):
+    if has_caption and transcript_data and transcript_data.get("words"):
         if source_ranges:
             timed_words = get_words_for_keep_ranges(transcript_data, source_ranges, output_offsets)
         else:
             timed_words = get_words_in_range(transcript_data, 0.0, duration)
 
-    words = caption_tokens(caption_text, timed_words)
-    caption_words = _caption_words_with_timings(words, timed_words, duration)
+    words = caption_tokens(caption_text, timed_words) if has_caption else []
+    caption_words = _caption_words_with_timings(words, timed_words, duration) if has_caption else []
     if not build_assemblyai_ass_subtitles(
         input_path,
         clip_start=0.0,
@@ -299,9 +301,11 @@ def overlay_custom_captions(
         font_size=font_size,
         font_color=font_color,
         caption_template=caption_template,
+        include_captions=has_caption,
         caption_words=caption_words,
         position_y_override=position_y,
         highlight_words=highlight_words,
+        **({"watermark_text": watermark_text} if watermark_text else {}),
     ):
         raise RuntimeError("Failed to build edited captions")
 

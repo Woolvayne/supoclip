@@ -306,5 +306,7 @@
     "approxTiming": "This video had no word timing, so captions and effects follow approximate timing.",
     "simplified": "Some effects were simplified for this clip."
   },
-  "sourceRange": "Part {start}–{end}"
+  "sourceRange": "Part {start}–{end}",
+  "sourceCreditBadge": "Credit: {channel}",
+  "sourceCreditTooltip": "Channel watermark \"Credit: {channel}\" burned into clips & included in social captions"
 }

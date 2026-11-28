@@ -772,6 +772,14 @@ async def _create_task(request: Request, db: AsyncSession, attempt: SourceAttemp
     add_subtitles = data.get("add_subtitles", True)
     if not isinstance(add_subtitles, bool):
         add_subtitles = True
+    source_watermark = data.get("source_watermark", True)
+    if not isinstance(source_watermark, bool):
+        source_watermark = True
+    requested_source_channel = (
+        data.get("source_channel").strip()
+        if isinstance(data.get("source_channel"), str) and data.get("source_channel").strip()
+        else None
+    )
     try:
         clip_length = validate_clip_length(data.get("clip_length", "auto"))
     except ValueError as exc:
@@ -891,6 +899,7 @@ async def _create_task(request: Request, db: AsyncSession, attempt: SourceAttemp
             # stored source, downloads and caches see one form per video.
             raw_source["url"] = canonical_youtube_url(raw_source["url"]) or raw_source["url"]
         source_title = raw_source.get("title")
+        detected_source_channel: Optional[str] = None
         stream_metadata: Dict[str, Any] | None = None
         duration_limit = (
             billing["max_youtube_duration_seconds"]
@@ -902,10 +911,14 @@ async def _create_task(request: Request, db: AsyncSession, attempt: SourceAttemp
         if source_type == "youtube":
             metadata = await _preflight_youtube_source(raw_source["url"], whole_video_limit)
             source_title = source_title or metadata.get("title") or "YouTube Video"
+            if isinstance(metadata.get("uploader"), str) and metadata["uploader"].strip():
+                detected_source_channel = metadata["uploader"].strip()
             duration_seconds = float(metadata["duration"])
         elif source_type in {"twitch", "kick"}:
             stream_metadata = await _preflight_stream_source(raw_source["url"], source_type, whole_video_limit)
             source_title = source_title or stream_metadata.get("title") or f"{source_type.title()} Video"
+            if isinstance(stream_metadata.get("uploader"), str) and stream_metadata["uploader"].strip():
+                detected_source_channel = stream_metadata["uploader"].strip()
             duration_seconds = float(stream_metadata["duration"])
         else:
             if await foreign_upload(db, raw_source["url"], user_id):
@@ -986,6 +999,7 @@ async def _create_task(request: Request, db: AsyncSession, attempt: SourceAttemp
             try:
                 # Persist retry options before submitting the job; Redis remains a legacy cache.
                 processing_job_id = f"{task_id}:{secrets.token_hex(16)}"
+                effective_source_channel = requested_source_channel or detected_source_channel
                 await _save_task_source_metadata(
                     task_id,
                     _merge_task_source_metadata(
@@ -996,6 +1010,8 @@ async def _create_task(request: Request, db: AsyncSession, attempt: SourceAttemp
                             **({"source_key": source_key} if source_key else {}),
                             **_stream_resolution_metadata(stream_metadata),
                             **({SOURCE_RANGE_KEY: source_range.to_metadata()} if source_range else {}),
+                            **({"source_channel": effective_source_channel} if effective_source_channel else {}),
+                            **({"source_watermark": False} if source_watermark is False else {}),
                         },
                         source_url=raw_source["url"],
                         source_type=source_type,
@@ -1875,6 +1891,14 @@ async def apply_task_settings(
         # Cleanup fields the request omits keep the task's stored values, so a
         # styling-only update can't silently switch pause/filler cleanup off.
         metadata = await _load_task_source_metadata(task_id, db=db)
+        if "source_watermark" in payload and isinstance(payload["source_watermark"], bool):
+            metadata["source_watermark"] = payload["source_watermark"]
+        if "source_channel" in payload and isinstance(payload["source_channel"], str):
+            cleaned_channel = payload["source_channel"].strip()
+            if cleaned_channel:
+                metadata["source_channel"] = cleaned_channel
+            else:
+                metadata.pop("source_channel", None)
         cleanup_settings = updated_cleanup_settings(payload, metadata)
         if font_family is not None and not is_font_accessible(
             font_family, task_record["user_id"]

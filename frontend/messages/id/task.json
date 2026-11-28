@@ -306,5 +306,7 @@
     "approxTiming": "Video ini tidak punya waktu per kata, jadi teks dan efek mengikuti waktu perkiraan.",
     "simplified": "Beberapa efek disederhanakan untuk klip ini."
   },
-  "sourceRange": "Bagian {start}–{end}"
+  "sourceRange": "Bagian {start}–{end}",
+  "sourceCreditBadge": "Credit: {channel}",
+  "sourceCreditTooltip": "Watermark kanal \"Credit: {channel}\" aktif di klip & caption sosial"
 }

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import {
   AlertCircle,
   Check,
+  ChevronDown,
   Clock,
   ExternalLink,
   Loader2,
@@ -14,6 +15,8 @@ import {
   RefreshCw,
   RotateCcw,
   Send,
+  SlidersHorizontal,
+  Sparkles,
   Trash2,
   XCircle,
 } from "lucide-react";
@@ -74,6 +77,25 @@ interface PublishableClip extends WorkflowClipFields {
 interface ClipPublishButtonProps {
   taskId: string;
   clip: PublishableClip;
+  connections: SocialConnection[];
+  providers: SocialProviderStatus[];
+  onChanged: () => void | Promise<void>;
+  compact?: boolean;
+}
+
+interface ClipAutoPostButtonProps {
+  taskId: string;
+  clip: PublishableClip;
+  connections: SocialConnection[];
+  providers: SocialProviderStatus[];
+  posts?: SocialPost[];
+  onChanged: () => void | Promise<void>;
+  compact?: boolean;
+}
+
+interface TaskAutoPublishAllButtonProps {
+  taskId: string;
+  clipCount: number;
   connections: SocialConnection[];
   providers: SocialProviderStatus[];
   onChanged: () => void | Promise<void>;
@@ -306,6 +328,7 @@ export function ClipPublishButton({
   connections,
   providers,
   onChanged,
+  compact = false,
 }: ClipPublishButtonProps) {
   const t = useTranslations("social");
   const tTask = useTranslations("task");
@@ -325,6 +348,8 @@ export function ClipPublishButton({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGeneratingCaption, setIsGeneratingCaption] = useState(false);
   const captionRevision = useRef(0);
+  const hashtagsRevision = useRef(0);
+  const titleRevision = useRef(0);
   const captionRequest = useRef(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -393,6 +418,8 @@ export function ClipPublishButton({
     if (!connection) return;
     const request = ++captionRequest.current;
     const revision = captionRevision.current;
+    const tagsRev = hashtagsRevision.current;
+    const ttlRev = titleRevision.current;
     setIsGeneratingCaption(true);
     setError(null);
     try {
@@ -407,6 +434,28 @@ export function ClipPublishButton({
       // A late response must never replace edits or a newer form's draft.
       if (request === captionRequest.current && revision === captionRevision.current) {
         setCaption(data.caption);
+      }
+      if (
+        request === captionRequest.current &&
+        tagsRev === hashtagsRevision.current &&
+        Array.isArray(data.hashtags) &&
+        data.hashtags.length > 0
+      ) {
+        setHashtags(
+          data.hashtags
+            .map((tag: unknown) => String(tag ?? "").replace(/^#+/, "").trim())
+            .filter(Boolean)
+            .join(", "),
+        );
+      }
+      if (
+        request === captionRequest.current &&
+        ttlRev === titleRevision.current &&
+        !clip.hook_title &&
+        typeof data.title === "string" &&
+        data.title.trim()
+      ) {
+        setTitle(data.title.trim());
       }
     } catch (err) {
       if (request === captionRequest.current) {
@@ -432,7 +481,9 @@ export function ClipPublishButton({
   const openSheet = () => {
     const available = activeConnections.filter((connection) => connection.status !== "reauth_required");
     const retained = accountIds.filter((id) => available.some((connection) => connection.id === id));
-    const nextIds = retained.length ? retained : available.slice(0, 1).map((connection) => connection.id);
+    const bufferIds = available.filter((connection) => connection.provider === "buffer").map((connection) => connection.id);
+    const defaultIds = bufferIds.length > 0 ? bufferIds : available.slice(0, 1).map((connection) => connection.id);
+    const nextIds = retained.length ? retained : defaultIds;
     setError(null);
     setSubmissions({});
     const plannedCaption = clip.workflow_meta?.post_caption?.trim();
@@ -547,10 +598,23 @@ export function ClipPublishButton({
 
   return (
     <>
-      <Button size="sm" variant="outline" onClick={openSheet}>
-        <Send className="w-4 h-4" />
-        {t("publish")}
-      </Button>
+      {compact ? (
+        <Button
+          size="icon-sm"
+          variant="outline"
+          className="size-7 shrink-0"
+          onClick={openSheet}
+          aria-label={t("customizePublish")}
+          title={t("customizePublish")}
+        >
+          <SlidersHorizontal className="size-3.5" />
+        </Button>
+      ) : (
+        <Button size="sm" variant="outline" onClick={openSheet}>
+          <Send className="w-4 h-4" />
+          {t("publish")}
+        </Button>
+      )}
 
       <Sheet open={open} onOpenChange={changeOpen}>
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto" showCloseButton={!isSubmitting}>
@@ -621,7 +685,10 @@ export function ClipPublishButton({
                     value={title}
                     maxLength={titleMaxLength}
                     disabled={isSubmitting}
-                    onChange={(event) => setTitle(event.target.value)}
+                    onChange={(event) => {
+                      titleRevision.current++;
+                      setTitle(event.target.value);
+                    }}
                   />
                   {hasTikTok && (
                     <p className="text-xs text-muted-foreground">{t("tiktokTitle")}</p>
@@ -656,7 +723,10 @@ export function ClipPublishButton({
                     value={hashtags}
                     disabled={isSubmitting}
                     placeholder={t("hashtagsPlaceholder")}
-                    onChange={(event) => setHashtags(event.target.value)}
+                    onChange={(event) => {
+                      hashtagsRevision.current++;
+                      setHashtags(event.target.value);
+                    }}
                   />
                 </div>
 
@@ -726,3 +796,264 @@ export function ClipPublishButton({
     </>
   );
 }
+
+export function ClipAutoPostButton({
+  taskId,
+  clip,
+  connections,
+  providers,
+  posts = [],
+  onChanged,
+  compact = false,
+}: ClipAutoPostButtonProps) {
+  const t = useTranslations("social");
+  const [busy, setBusy] = useState(false);
+
+  const anyProviderConfigured = providers.some((provider) => provider.configured);
+  const activeConnections = useMemo(
+    () =>
+      connections.filter(
+        (connection) =>
+          connection.status === "active" &&
+          providers.some(
+            (provider) => provider.provider === connection.provider && provider.configured && !provider.paused,
+          ),
+      ),
+    [connections, providers],
+  );
+
+  if (!anyProviderConfigured) return null;
+
+  const isUploading = posts.some((p) => p.status === "queued" || p.status === "publishing");
+  const scheduledPost = posts.find((p) => p.status === "scheduled");
+  const allAccountsCovered =
+    activeConnections.length > 0 &&
+    activeConnections.every((acc) =>
+      posts.some(
+        (p) =>
+          p.social_account_id === acc.id &&
+          (p.status === "queued" || p.status === "publishing" || p.status === "scheduled" || p.status === "published"),
+      ),
+    );
+
+  const handleAutoPost = async () => {
+    if (busy || isUploading) return;
+    if (activeConnections.length === 0) {
+      toast.error(t("autoPostConnectFirst"), {
+        action: {
+          label: t("toasts.open"),
+          onClick: () => {
+            window.location.href = "/settings/social";
+          },
+        },
+      });
+      return;
+    }
+    setBusy(true);
+    try {
+      const response = await fetch("/api/social/auto-publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(90_000),
+        body: JSON.stringify({
+          task_id: taskId,
+          clip_ids: [clip.id],
+          mode: "now",
+        }),
+      });
+      if (!response.ok) {
+        toast.error(await readError(response, t("publishFailed")));
+        return;
+      }
+      const data = await response.json().catch(() => ({}));
+      if ((data?.clips_published_or_scheduled ?? 0) === 0 && (data?.skipped_clips ?? 0) > 0) {
+        toast.info(t("autoPostAlreadyDone"));
+      } else {
+        toast.success(t("autoPostSingleSuccess"));
+      }
+      await onChanged();
+    } catch {
+      toast.error(t("publishFailed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (allAccountsCovered) {
+    const label = isUploading
+      ? t("autoPosting")
+      : scheduledPost
+        ? scheduledPost.scheduled_for
+          ? `${t("autoScheduled")} · ${new Date(scheduledPost.scheduled_for).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+          : t("autoScheduled")
+        : t("autoPosted");
+    return (
+      <Button
+        size="sm"
+        variant="secondary"
+        className={compact ? "h-7 flex-1 px-2 text-xs" : undefined}
+        disabled
+        title={scheduledPost?.scheduled_for ? formatDateTime(scheduledPost.scheduled_for) : label}
+      >
+        {isUploading ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : scheduledPost ? (
+          <Clock className="size-3.5" />
+        ) : (
+          <Check className="size-3.5" />
+        )}
+        <span className="truncate">{label}</span>
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      size="sm"
+      variant={compact ? "secondary" : "default"}
+      className={compact ? "h-7 flex-1 px-2 text-xs" : undefined}
+      onClick={() => void handleAutoPost()}
+      disabled={busy || isUploading}
+      title={t("autoPostHint")}
+    >
+      {busy || isUploading ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+      <span className="truncate">{busy || isUploading ? t("autoPosting") : t("autoPost")}</span>
+    </Button>
+  );
+}
+
+export function TaskAutoPublishAllButton({
+  taskId,
+  clipCount,
+  connections,
+  providers,
+  onChanged,
+}: TaskAutoPublishAllButtonProps) {
+  const t = useTranslations("social");
+  const [busy, setBusy] = useState(false);
+  const [intervalMinutes, setIntervalMinutes] = useState<number>(60);
+  const [mode, setMode] = useState<"staggered" | "now">("staggered");
+
+  const anyProviderConfigured = providers.some((provider) => provider.configured);
+  const activeConnections = useMemo(
+    () =>
+      connections.filter(
+        (connection) =>
+          connection.status === "active" &&
+          providers.some(
+            (provider) => provider.provider === connection.provider && provider.configured && !provider.paused,
+          ),
+      ),
+    [connections, providers],
+  );
+
+  if (clipCount === 0 || !anyProviderConfigured) return null;
+
+  const runBatchPublish = async (chosenMode: "staggered" | "now", chosenInterval: number) => {
+    if (busy) return;
+    if (activeConnections.length === 0) {
+      toast.error(t("autoPostConnectFirst"), {
+        action: {
+          label: t("toasts.open"),
+          onClick: () => {
+            window.location.href = "/settings/social";
+          },
+        },
+      });
+      return;
+    }
+    setBusy(true);
+    try {
+      const response = await fetch("/api/social/auto-publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(120_000),
+        body: JSON.stringify({
+          task_id: taskId,
+          mode: chosenMode,
+          interval_minutes: chosenInterval,
+        }),
+      });
+      if (!response.ok) {
+        toast.error(await readError(response, t("publishFailed")));
+        return;
+      }
+      const data = await response.json().catch(() => ({}));
+      const count = Number(data?.clips_published_or_scheduled ?? 0);
+      if (count === 0 && Number(data?.skipped_clips ?? 0) > 0) {
+        toast.info(t("autoPostAlreadyDone"));
+      } else if (chosenMode === "now" || count === 1) {
+        toast.success(t("autoPostSingleSuccess"));
+      } else {
+        toast.success(t("autoPostBatchSuccess", { count }));
+      }
+      await onChanged();
+    } catch {
+      toast.error(t("publishFailed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="inline-flex items-center">
+      <Button
+        size="sm"
+        className="rounded-r-none"
+        onClick={() => void runBatchPublish(mode, intervalMinutes)}
+        disabled={busy}
+        title={t("autoPostHint")}
+      >
+        {busy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+        {busy ? t("autoPostingAll") : t("autoPostAll")}
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="sm"
+            className="rounded-l-none border-l border-primary-foreground/25 px-2"
+            disabled={busy}
+            aria-label={t("autoPostIntervalLabel")}
+          >
+            <ChevronDown className="size-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <div className="px-2 py-1.5 text-xs text-muted-foreground">{t("autoPostHint")}</div>
+          <DropdownMenuSeparator />
+          {[
+            { mins: 30, label: t("autoPostInterval30m") },
+            { mins: 60, label: t("autoPostInterval1h") },
+            { mins: 120, label: t("autoPostInterval2h") },
+            { mins: 180, label: t("autoPostInterval3h") },
+          ].map((opt) => (
+            <DropdownMenuItem
+              key={opt.mins}
+              onSelect={() => {
+                setMode("staggered");
+                setIntervalMinutes(opt.mins);
+                void runBatchPublish("staggered", opt.mins);
+              }}
+            >
+              <Clock className="size-4" />
+              <span className="flex-1">{opt.label}</span>
+              {mode === "staggered" && intervalMinutes === opt.mins && <Check className="size-4" />}
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onSelect={() => {
+              setMode("now");
+              void runBatchPublish("now", intervalMinutes);
+            }}
+          >
+            <Send className="size-4" />
+            <span className="flex-1">{t("autoPostAllNow")}</span>
+            {mode === "now" && <Check className="size-4" />}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+

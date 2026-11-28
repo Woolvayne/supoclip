@@ -541,5 +541,9 @@
       "title": "Este vídeo passa do seu limite de {minutes} minutos",
       "body": "Ele é mais longo do que seu plano permite e não dá para escolher uma parte aqui. Use a gravação final ou um vídeo mais curto. Nenhum minuto foi usado."
     }
-  }
+  },
+  "sourceWatermark": "Marca d'água do canal (Credit)",
+  "sourceWatermarkHint": "Grava automaticamente \"Credit: Canal\" no canto superior esquerdo e adiciona o crédito nas legendas sociais.",
+  "sourceChannelLabel": "Nome do canal personalizado (opcional)",
+  "sourceChannelPlaceholder": "Detectar automaticamente do canal"
 }

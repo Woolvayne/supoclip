@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Type
 
 from ..config import Config, get_config
 from .base import SUPPORTED_PROVIDERS, SocialProvider
+from .buffer import BufferProvider
 from .instagram import InstagramProvider
 from .tiktok import TikTokProvider
 from .youtube import YouTubeProvider
@@ -16,12 +17,14 @@ _PROVIDER_CLASSES: Dict[str, Type[SocialProvider]] = {
     "youtube": YouTubeProvider,
     "tiktok": TikTokProvider,
     "instagram": InstagramProvider,
+    "buffer": BufferProvider,
 }
 
 PROVIDER_SETUP_HINTS = {
     "youtube": "Set YOUTUBE_OAUTH_CLIENT_ID and YOUTUBE_OAUTH_CLIENT_SECRET from a Google Cloud OAuth client.",
     "tiktok": "Set TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET from the TikTok for Developers portal.",
     "instagram": "Set INSTAGRAM_APP_ID and INSTAGRAM_APP_SECRET from a Meta app with Instagram Login.",
+    "buffer": "Connect with a personal Buffer API key from publish.buffer.com/settings/api.",
 }
 
 
@@ -44,6 +47,10 @@ def list_provider_status(config: Optional[Config] = None) -> List[Dict[str, Any]
             {
                 "provider": name,
                 "display_name": provider.display_name,
+                "auth_type": getattr(provider, "auth_type", "oauth"),
+                "has_server_api_key": bool(
+                    name == "buffer" and runtime_config.buffer_api_key
+                ),
                 "configured": configured,
                 "supported_privacy_levels": list(provider.supported_privacy_levels),
                 "default_privacy_level": provider.default_privacy_level,

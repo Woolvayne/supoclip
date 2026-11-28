@@ -445,9 +445,88 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# [Bereich G] Supervisor aktualisieren & Dienste starten/pruefen
+# [Bereich G] Supervisor & Smart-Port-1978-Multiplexer (HTTP->HTTPS + TLS)
 # -----------------------------------------------------------------------------
-echo "==> [G/G] Konfiguriere Supervisor & starte Dienste (Port ${HTTPS_PORT})..."
+echo "==> [G/G] Konfiguriere Smart-Port-${HTTPS_PORT}-Multiplexer & Supervisor..."
+
+cat << 'PORTMUX' > /opt/supoclip/port1978_mux.js
+const net = require("net");
+
+const SSLIP_HOST = process.env.SSLIP_HOST || "127-0-0-1.sslip.io";
+const PUBLIC_PORT = Number(process.env.HTTPS_PORT || 1978);
+const TLS_BACKEND_PORT = Number(process.env.CADDY_INTERNAL_TLS_PORT || 1979);
+
+const server = net.createServer({ allowHalfOpen: false }, (client) => {
+  client.setNoDelay(true);
+  client.setKeepAlive(true, 30000);
+
+  const handshakeTimer = setTimeout(() => {
+    client.destroy();
+  }, 15000);
+
+  client.once("data", (firstChunk) => {
+    clearTimeout(handshakeTimer);
+    if (!firstChunk || firstChunk.length === 0) {
+      client.destroy();
+      return;
+    }
+
+    // 0x16 = TLS ClientHello -> raw TCP tunnel to Caddy TLS on 127.0.0.1:1979
+    if (firstChunk[0] === 0x16) {
+      client.pause();
+      const upstream = net.connect(TLS_BACKEND_PORT, "127.0.0.1", () => {
+        upstream.setNoDelay(true);
+        upstream.setKeepAlive(true, 30000);
+        upstream.write(firstChunk);
+        client.pipe(upstream);
+        upstream.pipe(client);
+        client.resume();
+      });
+
+      const cleanup = () => {
+        if (!client.destroyed) client.destroy();
+        if (!upstream.destroyed) upstream.destroy();
+      };
+      upstream.on("error", cleanup);
+      client.on("error", cleanup);
+      upstream.on("close", cleanup);
+      client.on("close", cleanup);
+      return;
+    }
+
+    // Plain HTTP request on port 1978 -> instant 301 redirect to https://<SSLIP_HOST>:1978<path>
+    const reqHead = firstChunk.toString("latin1");
+    const firstLine = (reqHead.split("\r\n")[0] || "");
+    const match = firstLine.match(/^[A-Z]+\s+(\S+)/);
+    const reqPath = match && match[1] && match[1].startsWith("/") ? match[1] : "/";
+    const location = `https://${SSLIP_HOST}:${PUBLIC_PORT}${reqPath}`;
+    const html = `<!doctype html><html><head><meta http-equiv="refresh" content="0;url=${location}"></head><body>Weiterleitung zu <a href="${location}">${location}</a>...</body></html>`;
+    const resp =
+      `HTTP/1.1 301 Moved Permanently\r\n` +
+      `Location: ${location}\r\n` +
+      `Content-Type: text/html; charset=utf-8\r\n` +
+      `Content-Length: ${Buffer.byteLength(html)}\r\n` +
+      `Cache-Control: no-store\r\n` +
+      `Connection: close\r\n\r\n` +
+      html;
+    client.end(resp);
+  });
+
+  client.on("error", () => {
+    clearTimeout(handshakeTimer);
+  });
+});
+
+server.on("error", (err) => {
+  console.error("[port1978-mux] error:", err.message);
+  process.exit(1);
+});
+
+server.listen(PUBLIC_PORT, "0.0.0.0", () => {
+  console.log(`[port1978-mux] 0.0.0.0:${PUBLIC_PORT} -> https://${SSLIP_HOST}:${PUBLIC_PORT} (TLS -> 127.0.0.1:${TLS_BACKEND_PORT})`);
+});
+PORTMUX
+
 cat << SUPERVISOR_HEADER > /opt/supoclip/run_supervisor.sh
 #!/usr/bin/env bash
 set -u
@@ -589,6 +668,9 @@ while true; do
   if ! pgrep -f "server-request-timeout.cjs" >/dev/null 2>&1; then
     (cd "$STANDALONE_DIR" && DATABASE_URL="$SYNC_DB_URL" PORT=3107 HOSTNAME=0.0.0.0 node --require ./server-request-timeout.cjs server.js >>/var/log/supoclip/frontend.log 2>&1 &)
   fi
+  if [ "${USE_PORT_MUX:-1}" = "1" ] && [ -f /opt/supoclip/port1978_mux.js ] && ! pgrep -f "/opt/supoclip/port1978_mux.js" >/dev/null 2>&1; then
+    (SSLIP_HOST="$SSLIP_HOST" HTTPS_PORT="$HTTPS_PORT" CADDY_INTERNAL_TLS_PORT=1979 node /opt/supoclip/port1978_mux.js >>/var/log/supoclip/port1978_mux.log 2>&1 &)
+  fi
 
   sleep 10
 done
@@ -597,6 +679,7 @@ chmod +x /opt/supoclip/run_supervisor.sh
 
 # Sauberer Neustart der App-Prozesse mit aktueller Konfiguration & neuem Code
 pkill -f "/opt/supoclip/run_supervisor.sh" >/dev/null 2>&1 || true
+pkill -f "/opt/supoclip/port1978_mux.js" >/dev/null 2>&1 || true
 pkill -f "src.workers.run_workers" >/dev/null 2>&1 || true
 pkill -f "src.workers.tasks.WorkerSettings" >/dev/null 2>&1 || true
 pkill -f "src.workers.cron_worker.CronWorkerSettings" >/dev/null 2>&1 || true
